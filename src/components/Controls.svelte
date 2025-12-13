@@ -5,6 +5,7 @@
   const dispatch = createEventDispatcher()
 
   export let showCopyLink: boolean = false
+  export let copied: boolean = false
 
   let audioDevices: MediaDeviceInfo[] = []
   let videoDevices: MediaDeviceInfo[] = []
@@ -181,11 +182,18 @@
     <!-- Copy link button -->
     {#if showCopyLink}
       <button
-        class="w-12 h-12 rounded-full bg-surface-light hover:bg-surface-lighter flex items-center justify-center transition-colors"
+        class="w-12 h-12 rounded-full flex items-center justify-center transition-colors"
+        class:bg-green-600={copied}
+        class:bg-surface-light={!copied}
+        class:hover:bg-surface-lighter={!copied}
         on:click={handleCopyLink}
-        title="Copy meeting link"
+        title={copied ? 'Copied!' : 'Copy meeting link'}
       >
-        <span class="i-carbon-link text-xl text-white"></span>
+        {#if copied}
+          <span class="i-carbon-checkmark text-xl text-white"></span>
+        {:else}
+          <span class="i-carbon-link text-xl text-white"></span>
+        {/if}
       </button>
     {/if}
 

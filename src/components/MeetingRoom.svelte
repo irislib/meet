@@ -113,6 +113,6 @@
 
   <!-- Controls -->
   {#if !joining && !error}
-    <Controls showCopyLink={true} on:leave={handleLeave} on:copyLink={handleCopyLink} on:toggleChat={() => chatOpen = !chatOpen} />
+    <Controls showCopyLink={true} {copied} on:leave={handleLeave} on:copyLink={handleCopyLink} on:toggleChat={() => chatOpen = !chatOpen} />
   {/if}
 </div>
