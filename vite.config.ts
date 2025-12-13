@@ -1,0 +1,15 @@
+import { defineConfig } from 'vite'
+import { svelte } from '@sveltejs/vite-plugin-svelte'
+import UnoCSS from 'unocss/vite'
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [
+    UnoCSS(),
+    svelte(),
+  ],
+  base: process.env.GITHUB_PAGES ? '/iris-meet/' : '/',
+  server: {
+    allowedHosts: true,
+  },
+})

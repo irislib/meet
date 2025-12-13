@@ -1,0 +1,615 @@
+import { writable, get } from 'svelte/store'
+import type NDK from '@nostr-dev-kit/ndk'
+import { NDKEvent, NDKSubscription, NDKPrivateKeySigner } from '@nostr-dev-kit/ndk'
+import { identity, ndk, getPrivkeyHex } from './identity'
+import { getDisplayName } from './animalNames'
+import { createMeetingEncryption, type MeetingEncryption } from './encryption'
+
+export interface Participant {
+  pubkey: string
+  displayName: string
+  stream: MediaStream | null
+  peerConnection: RTCPeerConnection | null
+  dataChannel: RTCDataChannel | null
+  audioEnabled: boolean
+  videoEnabled: boolean
+}
+
+export interface ChatMessage {
+  id: string
+  from: string
+  fromName: string
+  text: string
+  timestamp: number
+}
+
+export interface LocalMedia {
+  stream: MediaStream | null
+  audioEnabled: boolean
+  videoEnabled: boolean
+}
+
+// Inner signed message (encrypted in the Nostr event)
+interface SignalPayload {
+  type: 'offer' | 'answer' | 'ice-candidate' | 'join' | 'leave' | 'media-state'
+  from: string // sender's identity pubkey
+  fromName: string
+  to?: string // target pubkey for direct messages
+  data?: any
+  timestamp: number
+}
+
+const ICE_SERVERS: RTCIceServer[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+]
+
+// Stores
+export const participants = writable<Map<string, Participant>>(new Map())
+export const localMedia = writable<LocalMedia>({
+  stream: null,
+  audioEnabled: true,
+  videoEnabled: true,
+})
+export const chatMessages = writable<ChatMessage[]>([])
+export const unreadCount = writable<number>(0)
+
+// Kind for signaling events
+const SIGNAL_KIND = 25050
+
+let currentRoomId: string | null = null
+let currentMeetingPrivkey: string | null = null
+let meetingEncryption: MeetingEncryption | null = null
+let signalSubscription: NDKSubscription | null = null
+
+// ICE candidate queue per peer (for candidates received before remote description)
+const iceCandidateQueues = new Map<string, RTCIceCandidateInit[]>()
+
+// Track processed message timestamps to avoid duplicates
+const processedMessages = new Set<string>()
+
+export async function getLocalStream(video = true, audio = true): Promise<MediaStream> {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: video ? {
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      facingMode: 'user',
+    } : false,
+    audio: audio ? {
+      echoCancellation: true,
+      noiseSuppression: true,
+    } : false,
+  })
+
+  localMedia.set({
+    stream,
+    audioEnabled: audio,
+    videoEnabled: video,
+  })
+
+  return stream
+}
+
+export function toggleAudio(): boolean {
+  const media = get(localMedia)
+  if (!media.stream) return false
+
+  const audioTracks = media.stream.getAudioTracks()
+  const newState = !media.audioEnabled
+
+  audioTracks.forEach(track => {
+    track.enabled = newState
+  })
+
+  localMedia.update(m => ({ ...m, audioEnabled: newState }))
+  broadcastMediaState()
+
+  return newState
+}
+
+export function toggleVideo(): boolean {
+  const media = get(localMedia)
+  if (!media.stream) return false
+
+  const videoTracks = media.stream.getVideoTracks()
+  const newState = !media.videoEnabled
+
+  videoTracks.forEach(track => {
+    track.enabled = newState
+  })
+
+  localMedia.update(m => ({ ...m, videoEnabled: newState }))
+  broadcastMediaState()
+
+  return newState
+}
+
+export function stopLocalStream(): void {
+  const media = get(localMedia)
+  if (media.stream) {
+    media.stream.getTracks().forEach(track => track.stop())
+  }
+  localMedia.set({ stream: null, audioEnabled: true, videoEnabled: true })
+}
+
+async function sendSignal(payload: Omit<SignalPayload, 'from' | 'fromName' | 'timestamp'>): Promise<void> {
+  const ndkInstance = get(ndk)
+  const currentIdentity = get(identity)
+  if (!ndkInstance || !currentIdentity || !currentRoomId || !meetingEncryption) return
+
+  const fullPayload: SignalPayload = {
+    ...payload,
+    from: currentIdentity.pubkey,
+    fromName: getDisplayName(currentIdentity.pubkey, currentIdentity.displayName),
+    timestamp: Date.now(),
+  }
+
+  // Encrypt the payload with the meeting key
+  const plaintext = JSON.stringify(fullPayload)
+  const userPrivkey = getPrivkeyHex()
+  const ciphertext = meetingEncryption.encrypt(plaintext, userPrivkey || currentMeetingPrivkey!)
+
+  const event = new NDKEvent(ndkInstance)
+  event.kind = SIGNAL_KIND
+  event.content = ciphertext
+  event.tags = [
+    ['r', currentRoomId],
+  ]
+
+  await event.publish()
+}
+
+async function broadcastMediaState(): Promise<void> {
+  const media = get(localMedia)
+  if (!currentRoomId) return
+
+  await sendSignal({
+    type: 'media-state',
+    data: {
+      audioEnabled: media.audioEnabled,
+      videoEnabled: media.videoEnabled,
+    },
+  })
+}
+
+function setupDataChannel(dc: RTCDataChannel, remotePubkey: string): void {
+  dc.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data) as ChatMessage
+      chatMessages.update(msgs => [...msgs, msg])
+      unreadCount.update(n => n + 1)
+    } catch (err) {
+      console.warn('Failed to parse chat message:', err)
+    }
+  }
+
+  dc.onopen = () => {
+    console.log(`Data channel open with ${remotePubkey.slice(0, 8)}`)
+    participants.update(p => {
+      const participant = p.get(remotePubkey)
+      if (participant) {
+        participant.dataChannel = dc
+      }
+      return new Map(p)
+    })
+  }
+
+  dc.onclose = () => {
+    console.log(`Data channel closed with ${remotePubkey.slice(0, 8)}`)
+  }
+}
+
+function createPeerConnection(remotePubkey: string, initiator: boolean): RTCPeerConnection {
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
+  const media = get(localMedia)
+
+  // Create data channel if we're the initiator
+  if (initiator) {
+    const dc = pc.createDataChannel('chat')
+    setupDataChannel(dc, remotePubkey)
+  }
+
+  // Handle incoming data channel
+  pc.ondatachannel = (event) => {
+    setupDataChannel(event.channel, remotePubkey)
+  }
+
+  // Add local tracks
+  if (media.stream) {
+    media.stream.getTracks().forEach(track => {
+      pc.addTrack(track, media.stream!)
+    })
+  }
+
+  // Handle ICE candidates
+  pc.onicecandidate = async (event) => {
+    if (event.candidate && currentRoomId) {
+      await sendSignal({
+        type: 'ice-candidate',
+        to: remotePubkey,
+        data: event.candidate.toJSON(),
+      })
+    }
+  }
+
+  // Handle remote tracks
+  pc.ontrack = (event) => {
+    participants.update(p => {
+      const participant = p.get(remotePubkey)
+      if (participant) {
+        participant.stream = event.streams[0] || new MediaStream([event.track])
+      }
+      return new Map(p)
+    })
+  }
+
+  // Handle connection state changes
+  pc.onconnectionstatechange = () => {
+    console.log(`Connection state with ${remotePubkey.slice(0, 8)}: ${pc.connectionState}`)
+    if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+      removeParticipant(remotePubkey)
+    }
+  }
+
+  return pc
+}
+
+function removeParticipant(pubkey: string): void {
+  participants.update(p => {
+    const participant = p.get(pubkey)
+    if (participant) {
+      participant.peerConnection?.close()
+      p.delete(pubkey)
+    }
+    return new Map(p)
+  })
+  iceCandidateQueues.delete(pubkey)
+}
+
+async function processQueuedIceCandidates(pubkey: string, pc: RTCPeerConnection): Promise<void> {
+  const queue = iceCandidateQueues.get(pubkey)
+  if (!queue || queue.length === 0) return
+
+  console.log(`Processing ${queue.length} queued ICE candidates for ${pubkey.slice(0, 8)}`)
+
+  for (const candidate of queue) {
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(candidate))
+    } catch (err) {
+      console.warn('Error adding queued ICE candidate:', err)
+    }
+  }
+
+  iceCandidateQueues.delete(pubkey)
+}
+
+async function handleSignalMessage(payload: SignalPayload): Promise<void> {
+  const currentIdentity = get(identity)
+  if (!currentIdentity) return
+
+  // Ignore our own messages
+  if (payload.from === currentIdentity.pubkey) return
+
+  // Ignore targeted messages not for us
+  if (payload.to && payload.to !== currentIdentity.pubkey) return
+
+  // Deduplicate messages
+  const msgId = `${payload.from}-${payload.type}-${payload.timestamp}`
+  if (processedMessages.has(msgId)) return
+  processedMessages.add(msgId)
+
+  // Clean up old message IDs (keep last 1000)
+  if (processedMessages.size > 1000) {
+    const arr = Array.from(processedMessages)
+    arr.slice(0, 500).forEach(id => processedMessages.delete(id))
+  }
+
+  switch (payload.type) {
+    case 'join':
+      await handleJoin(payload)
+      break
+    case 'offer':
+      await handleOffer(payload)
+      break
+    case 'answer':
+      await handleAnswer(payload)
+      break
+    case 'ice-candidate':
+      await handleIceCandidate(payload)
+      break
+    case 'leave':
+      handleLeave(payload)
+      break
+    case 'media-state':
+      handleMediaState(payload)
+      break
+  }
+}
+
+async function handleJoin(payload: SignalPayload): Promise<void> {
+  const currentIdentity = get(identity)
+  if (!currentIdentity) return
+
+  console.log(`${payload.fromName} joined the room`)
+
+  // Create participant entry if not exists
+  const existingParticipants = get(participants)
+  if (!existingParticipants.has(payload.from)) {
+    participants.update(p => {
+      p.set(payload.from, {
+        pubkey: payload.from,
+        displayName: payload.fromName,
+        stream: null,
+        peerConnection: null,
+        dataChannel: null,
+        audioEnabled: true,
+        videoEnabled: true,
+      })
+      return new Map(p)
+    })
+  }
+
+  // Use deterministic polite/impolite peer to avoid glare
+  // Lower pubkey is "polite" (waits), higher is "impolite" (initiates)
+  const weArePolite = currentIdentity.pubkey < payload.from
+
+  if (!weArePolite) {
+    // We initiate the connection (create offer) and data channel
+    const pc = createPeerConnection(payload.from, true)
+
+    participants.update(p => {
+      const participant = p.get(payload.from)
+      if (participant) {
+        participant.peerConnection = pc
+      }
+      return new Map(p)
+    })
+
+    try {
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+
+      await sendSignal({
+        type: 'offer',
+        to: payload.from,
+        data: pc.localDescription?.toJSON(),
+      })
+    } catch (err) {
+      console.error('Error creating offer:', err)
+    }
+  }
+  // If we're polite, we wait for their offer
+}
+
+async function handleOffer(payload: SignalPayload): Promise<void> {
+  const currentIdentity = get(identity)
+  if (!currentIdentity) return
+
+  console.log(`Received offer from ${payload.fromName}`)
+
+  let pc: RTCPeerConnection
+  const existingParticipant = get(participants).get(payload.from)
+
+  if (existingParticipant?.peerConnection) {
+    pc = existingParticipant.peerConnection
+
+    // Handle glare: if we have a local offer pending, check who should back off
+    if (pc.signalingState === 'have-local-offer') {
+      const weArePolite = currentIdentity.pubkey < payload.from
+      if (weArePolite) {
+        // We back off, accept their offer
+        console.log('Glare detected, we are polite - rolling back')
+        await pc.setLocalDescription({ type: 'rollback' })
+      } else {
+        // We ignore their offer, they should accept ours
+        console.log('Glare detected, we are impolite - ignoring their offer')
+        return
+      }
+    }
+  } else {
+    // We're receiving an offer, so we don't initiate data channel
+    pc = createPeerConnection(payload.from, false)
+
+    participants.update(p => {
+      if (!p.has(payload.from)) {
+        p.set(payload.from, {
+          pubkey: payload.from,
+          displayName: payload.fromName,
+          stream: null,
+          peerConnection: pc,
+          dataChannel: null,
+          audioEnabled: true,
+          videoEnabled: true,
+        })
+      } else {
+        p.get(payload.from)!.peerConnection = pc
+      }
+      return new Map(p)
+    })
+  }
+
+  try {
+    await pc.setRemoteDescription(new RTCSessionDescription(payload.data))
+
+    // Process any queued ICE candidates
+    await processQueuedIceCandidates(payload.from, pc)
+
+    const answer = await pc.createAnswer()
+    await pc.setLocalDescription(answer)
+
+    await sendSignal({
+      type: 'answer',
+      to: payload.from,
+      data: pc.localDescription?.toJSON(),
+    })
+  } catch (err) {
+    console.error('Error handling offer:', err)
+  }
+}
+
+async function handleAnswer(payload: SignalPayload): Promise<void> {
+  console.log(`Received answer from ${payload.fromName}`)
+
+  const participant = get(participants).get(payload.from)
+  if (!participant?.peerConnection) return
+
+  const pc = participant.peerConnection
+
+  // Only set remote description if we're expecting an answer
+  if (pc.signalingState !== 'have-local-offer') {
+    console.log(`Ignoring answer in state: ${pc.signalingState}`)
+    return
+  }
+
+  try {
+    await pc.setRemoteDescription(new RTCSessionDescription(payload.data))
+
+    // Process any queued ICE candidates
+    await processQueuedIceCandidates(payload.from, pc)
+  } catch (err) {
+    console.error('Error handling answer:', err)
+  }
+}
+
+async function handleIceCandidate(payload: SignalPayload): Promise<void> {
+  const participant = get(participants).get(payload.from)
+
+  if (!participant?.peerConnection || !participant.peerConnection.remoteDescription) {
+    // Queue the candidate for later
+    if (!iceCandidateQueues.has(payload.from)) {
+      iceCandidateQueues.set(payload.from, [])
+    }
+    iceCandidateQueues.get(payload.from)!.push(payload.data)
+    return
+  }
+
+  try {
+    await participant.peerConnection.addIceCandidate(new RTCIceCandidate(payload.data))
+  } catch (err) {
+    console.warn('Error adding ICE candidate:', err)
+  }
+}
+
+function handleLeave(payload: SignalPayload): void {
+  console.log(`${payload.fromName} left the room`)
+  removeParticipant(payload.from)
+}
+
+function handleMediaState(payload: SignalPayload): void {
+  participants.update(p => {
+    const participant = p.get(payload.from)
+    if (participant && payload.data) {
+      participant.audioEnabled = payload.data.audioEnabled
+      participant.videoEnabled = payload.data.videoEnabled
+    }
+    return new Map(p)
+  })
+}
+
+export async function joinRoom(roomId: string, meetingPrivkeyHex: string): Promise<void> {
+  const ndkInstance = get(ndk)
+  const currentIdentity = get(identity)
+  if (!ndkInstance || !currentIdentity) {
+    throw new Error('Not logged in')
+  }
+
+  currentRoomId = roomId
+  currentMeetingPrivkey = meetingPrivkeyHex
+  meetingEncryption = createMeetingEncryption(meetingPrivkeyHex)
+
+  // Clear any stale state
+  processedMessages.clear()
+  iceCandidateQueues.clear()
+
+  // Subscribe to room signals
+  signalSubscription = ndkInstance.subscribe(
+    {
+      kinds: [SIGNAL_KIND],
+      '#r': [roomId],
+      since: Math.floor(Date.now() / 1000) - 30, // Last 30 seconds
+    },
+    { closeOnEose: false }
+  )
+
+  signalSubscription.on('event', async (event: NDKEvent) => {
+    try {
+      // Decrypt the message using the meeting key
+      const plaintext = meetingEncryption!.decrypt(event.content, meetingEncryption!.roomPubkey)
+      const payload = JSON.parse(plaintext) as SignalPayload
+      await handleSignalMessage(payload)
+    } catch (err) {
+      // Silently ignore decryption errors (could be old messages or from other meetings)
+    }
+  })
+
+  // Announce join
+  await sendSignal({
+    type: 'join',
+  })
+}
+
+export async function leaveRoom(): Promise<void> {
+  if (currentRoomId) {
+    try {
+      await sendSignal({
+        type: 'leave',
+      })
+    } catch (err) {
+      // Ignore errors when leaving
+    }
+  }
+
+  // Close all peer connections
+  get(participants).forEach(participant => {
+    participant.peerConnection?.close()
+  })
+  participants.set(new Map())
+
+  // Stop subscription
+  signalSubscription?.stop()
+  signalSubscription = null
+
+  // Stop local media
+  stopLocalStream()
+
+  // Clear state
+  currentRoomId = null
+  currentMeetingPrivkey = null
+  meetingEncryption = null
+  processedMessages.clear()
+  iceCandidateQueues.clear()
+  chatMessages.set([])
+  unreadCount.set(0)
+}
+
+export function getCurrentRoomId(): string | null {
+  return currentRoomId
+}
+
+export function sendChatMessage(text: string): void {
+  const currentIdentity = get(identity)
+  if (!currentIdentity || !text.trim()) return
+
+  const msg: ChatMessage = {
+    id: `${currentIdentity.pubkey}-${Date.now()}`,
+    from: currentIdentity.pubkey,
+    fromName: getDisplayName(currentIdentity.pubkey, currentIdentity.displayName),
+    text: text.trim(),
+    timestamp: Date.now(),
+  }
+
+  // Add to our own messages
+  chatMessages.update(msgs => [...msgs, msg])
+
+  // Send to all participants via data channel
+  const msgStr = JSON.stringify(msg)
+  get(participants).forEach(participant => {
+    if (participant.dataChannel?.readyState === 'open') {
+      participant.dataChannel.send(msgStr)
+    }
+  })
+}
+
+export function clearUnreadCount(): void {
+  unreadCount.set(0)
+}
