@@ -90,8 +90,3 @@ export function leaveMeeting(): void {
   // Clear hash from URL
   history.replaceState(null, '', window.location.pathname + window.location.search)
 }
-
-// Get room ID from meeting (uses pubkey as room identifier)
-export function getRoomId(meeting: Meeting): string {
-  return meeting.pubkey
-}

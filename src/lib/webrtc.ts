@@ -1,7 +1,7 @@
 import { writable, get } from 'svelte/store'
 import type NDK from '@nostr-dev-kit/ndk'
 import { NDKEvent, NDKSubscription, NDKPrivateKeySigner } from '@nostr-dev-kit/ndk'
-import { identity, ndk, getPrivkeyHex } from './identity'
+import { identity, ndk } from './identity'
 import { getDisplayName } from './animalNames'
 import { createMeetingEncryption, type MeetingEncryption } from './encryption'
 
@@ -65,9 +65,8 @@ export const unreadCount = writable<number>(0)
 // Kind for signaling events
 const SIGNAL_KIND = 25050
 
-let currentRoomId: string | null = null
-let currentMeetingPrivkey: string | null = null
 let meetingEncryption: MeetingEncryption | null = null
+let meetingSigner: NDKPrivateKeySigner | null = null
 let signalSubscription: NDKSubscription | null = null
 
 // ICE candidate queue per peer (for candidates received before remote description)
@@ -301,7 +300,7 @@ export async function toggleScreenShare(): Promise<boolean> {
 async function sendSignal(payload: Omit<SignalPayload, 'from' | 'fromName' | 'timestamp'>): Promise<void> {
   const ndkInstance = get(ndk)
   const currentIdentity = get(identity)
-  if (!ndkInstance || !currentIdentity || !currentRoomId || !meetingEncryption) return
+  if (!ndkInstance || !currentIdentity || !meetingEncryption || !meetingSigner) return
 
   const fullPayload: SignalPayload = {
     ...payload,
@@ -312,22 +311,20 @@ async function sendSignal(payload: Omit<SignalPayload, 'from' | 'fromName' | 'ti
 
   // Encrypt the payload with the meeting key
   const plaintext = JSON.stringify(fullPayload)
-  const userPrivkey = getPrivkeyHex()
-  const ciphertext = meetingEncryption.encrypt(plaintext, userPrivkey || currentMeetingPrivkey!)
+  const ciphertext = meetingEncryption.encrypt(plaintext, meetingEncryption.roomPrivkey)
 
   const event = new NDKEvent(ndkInstance)
   event.kind = SIGNAL_KIND
   event.content = ciphertext
-  event.tags = [
-    ['r', currentRoomId],
-  ]
 
+  // Sign with meeting's key so events are authored by meeting pubkey
+  await event.sign(meetingSigner)
   await event.publish()
 }
 
 async function broadcastMediaState(): Promise<void> {
   const media = get(localMedia)
-  if (!currentRoomId) return
+  if (!meetingEncryption) return
 
   await sendSignal({
     type: 'media-state',
@@ -389,7 +386,7 @@ function createPeerConnection(remotePubkey: string, initiator: boolean): RTCPeer
 
   // Handle ICE candidates
   pc.onicecandidate = async (event) => {
-    if (event.candidate && currentRoomId) {
+    if (event.candidate && meetingEncryption) {
       await sendSignal({
         type: 'ice-candidate',
         to: remotePubkey,
@@ -684,27 +681,26 @@ function handleMediaState(payload: SignalPayload): void {
   })
 }
 
-export async function joinRoom(roomId: string, meetingPrivkeyHex: string): Promise<void> {
+export async function joinRoom(meetingPrivkeyHex: string): Promise<void> {
   const ndkInstance = get(ndk)
   const currentIdentity = get(identity)
   if (!ndkInstance || !currentIdentity) {
     throw new Error('Not logged in')
   }
 
-  currentRoomId = roomId
-  currentMeetingPrivkey = meetingPrivkeyHex
   meetingEncryption = createMeetingEncryption(meetingPrivkeyHex)
+  meetingSigner = new NDKPrivateKeySigner(meetingPrivkeyHex)
 
   // Clear any stale state
   processedMessages.clear()
   iceCandidateQueues.clear()
 
-  // Subscribe to room signals
+  // Subscribe to signals authored by the meeting's pubkey
   signalSubscription = ndkInstance.subscribe(
     {
       kinds: [SIGNAL_KIND],
-      '#r': [roomId],
-      since: Math.floor(Date.now() / 1000) - 30, // Last 30 seconds
+      authors: [meetingEncryption.roomPubkey],
+      since: Math.floor(Date.now() / 1000) - 60,
     },
     { closeOnEose: false }
   )
@@ -727,7 +723,7 @@ export async function joinRoom(roomId: string, meetingPrivkeyHex: string): Promi
 }
 
 export async function leaveRoom(): Promise<void> {
-  if (currentRoomId) {
+  if (meetingEncryption) {
     try {
       await sendSignal({
         type: 'leave',
@@ -751,17 +747,16 @@ export async function leaveRoom(): Promise<void> {
   stopLocalStream()
 
   // Clear state
-  currentRoomId = null
-  currentMeetingPrivkey = null
   meetingEncryption = null
+  meetingSigner = null
   processedMessages.clear()
   iceCandidateQueues.clear()
   chatMessages.set([])
   unreadCount.set(0)
 }
 
-export function getCurrentRoomId(): string | null {
-  return currentRoomId
+export function getMeetingPubkey(): string | null {
+  return meetingEncryption?.roomPubkey || null
 }
 
 export function sendChatMessage(text: string): void {

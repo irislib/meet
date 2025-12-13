@@ -4,7 +4,7 @@
   import Controls from './Controls.svelte'
   import Chat from './Chat.svelte'
   import { joinRoom, leaveRoom, getLocalStream, toggleAudio, toggleVideo } from '../lib/webrtc'
-  import { getMeetingLink, getRoomId, type Meeting } from '../lib/meeting'
+  import { getMeetingLink, type Meeting } from '../lib/meeting'
 
   export let meeting: Meeting
 
@@ -38,8 +38,7 @@
       await getLocalStream(true, true)
 
       // Join the meeting room
-      const roomId = getRoomId(meeting)
-      await joinRoom(roomId, meeting.privkeyHex)
+      await joinRoom(meeting.privkeyHex)
 
       joining = false
     } catch (e) {
