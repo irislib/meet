@@ -519,6 +519,13 @@ async function handleJoin(payload: SignalPayload): Promise<void> {
   // Lower pubkey is "polite" (waits), higher is "impolite" (initiates)
   const weArePolite = currentIdentity.pubkey < payload.from
 
+  // Check if we already have an active connection attempt
+  const participant = get(participants).get(payload.from)
+  if (participant?.peerConnection) {
+    // Already have a connection, don't create another
+    return
+  }
+
   if (!weArePolite) {
     // We initiate the connection (create offer) and data channel
     const pc = createPeerConnection(payload.from, true)
@@ -543,8 +550,13 @@ async function handleJoin(payload: SignalPayload): Promise<void> {
     } catch (err) {
       console.error('Error creating offer:', err)
     }
+  } else {
+    // We're polite - respond with our own join so they know we exist
+    // (they may have joined after our original join message was sent)
+    await sendSignal({
+      type: 'join',
+    })
   }
-  // If we're polite, we wait for their offer
 }
 
 async function handleOffer(payload: SignalPayload): Promise<void> {

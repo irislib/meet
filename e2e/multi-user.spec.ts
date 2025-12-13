@@ -37,6 +37,16 @@ test.describe('Multi-user Meeting', () => {
     await page2.getByRole('button', { name: 'Join Meeting' }).click();
     await expect(page2.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
 
+    // Verify WebRTC connection - both users should see each other's video tiles
+    // Each user sees their own tile (with "You") plus the remote participant
+    await expect(page1.getByText('(You)')).toBeVisible({ timeout: 15000 });
+    await expect(page2.getByText('(You)')).toBeVisible({ timeout: 15000 });
+
+    // Wait for peer connection to establish and verify remote participant appears
+    // Each user should see 2 video tiles (their own + remote participant)
+    await expect(page1.getByTestId('video-tile')).toHaveCount(2, { timeout: 15000 });
+    await expect(page2.getByTestId('video-tile')).toHaveCount(2, { timeout: 15000 });
+
     // Clean up
     await context1.close();
     await context2.close();

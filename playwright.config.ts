@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// Limit workers to avoid overwhelming relay connections
-const workers = process.env.PW_WORKERS ? parseInt(process.env.PW_WORKERS) : 4;
+// Use all CPU cores by default
+const workers = process.env.PW_WORKERS ? parseInt(process.env.PW_WORKERS) : '100%';
 
 export default defineConfig({
   testDir: './e2e',
