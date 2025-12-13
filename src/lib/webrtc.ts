@@ -25,8 +25,12 @@ export interface ChatMessage {
 
 export interface LocalMedia {
   stream: MediaStream | null
+  screenStream: MediaStream | null
   audioEnabled: boolean
   videoEnabled: boolean
+  screenSharing: boolean
+  audioDeviceId: string | null
+  videoDeviceId: string | null
 }
 
 // Inner signed message (encrypted in the Nostr event)
@@ -48,8 +52,12 @@ const ICE_SERVERS: RTCIceServer[] = [
 export const participants = writable<Map<string, Participant>>(new Map())
 export const localMedia = writable<LocalMedia>({
   stream: null,
+  screenStream: null,
   audioEnabled: true,
   videoEnabled: true,
+  screenSharing: false,
+  audioDeviceId: null,
+  videoDeviceId: null,
 })
 export const chatMessages = writable<ChatMessage[]>([])
 export const unreadCount = writable<number>(0)
@@ -81,10 +89,20 @@ export async function getLocalStream(video = true, audio = true): Promise<MediaS
     } : false,
   })
 
+  // Get device IDs from the tracks
+  const audioTrack = stream.getAudioTracks()[0]
+  const videoTrack = stream.getVideoTracks()[0]
+  const audioDeviceId = audioTrack?.getSettings().deviceId || null
+  const videoDeviceId = videoTrack?.getSettings().deviceId || null
+
   localMedia.set({
     stream,
+    screenStream: null,
     audioEnabled: audio,
     videoEnabled: video,
+    screenSharing: false,
+    audioDeviceId,
+    videoDeviceId,
   })
 
   return stream
@@ -129,7 +147,155 @@ export function stopLocalStream(): void {
   if (media.stream) {
     media.stream.getTracks().forEach(track => track.stop())
   }
-  localMedia.set({ stream: null, audioEnabled: true, videoEnabled: true })
+  if (media.screenStream) {
+    media.screenStream.getTracks().forEach(track => track.stop())
+  }
+  localMedia.set({ stream: null, screenStream: null, audioEnabled: true, videoEnabled: true, screenSharing: false, audioDeviceId: null, videoDeviceId: null })
+}
+
+// Get available media devices
+export async function getMediaDevices(): Promise<{ audioInputs: MediaDeviceInfo[], videoInputs: MediaDeviceInfo[] }> {
+  const devices = await navigator.mediaDevices.enumerateDevices()
+  return {
+    audioInputs: devices.filter(d => d.kind === 'audioinput'),
+    videoInputs: devices.filter(d => d.kind === 'videoinput'),
+  }
+}
+
+// Switch camera
+export async function switchCamera(deviceId: string): Promise<void> {
+  const media = get(localMedia)
+  if (!media.stream) return
+
+  // Stop current video tracks
+  media.stream.getVideoTracks().forEach(track => track.stop())
+
+  // Get new video stream with specific device
+  const newStream = await navigator.mediaDevices.getUserMedia({
+    video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } },
+  })
+
+  const newVideoTrack = newStream.getVideoTracks()[0]
+
+  // Replace track in stream
+  media.stream.getVideoTracks().forEach(track => media.stream!.removeTrack(track))
+  media.stream.addTrack(newVideoTrack)
+
+  // Replace track in all peer connections
+  get(participants).forEach(participant => {
+    const pc = participant.peerConnection
+    if (pc) {
+      const sender = pc.getSenders().find(s => s.track?.kind === 'video')
+      if (sender) {
+        sender.replaceTrack(newVideoTrack)
+      }
+    }
+  })
+
+  localMedia.update(m => ({ ...m, videoEnabled: true, videoDeviceId: deviceId }))
+}
+
+// Switch microphone
+export async function switchMicrophone(deviceId: string): Promise<void> {
+  const media = get(localMedia)
+  if (!media.stream) return
+
+  // Stop current audio tracks
+  media.stream.getAudioTracks().forEach(track => track.stop())
+
+  // Get new audio stream with specific device
+  const newStream = await navigator.mediaDevices.getUserMedia({
+    audio: { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true },
+  })
+
+  const newAudioTrack = newStream.getAudioTracks()[0]
+
+  // Replace track in stream
+  media.stream.getAudioTracks().forEach(track => media.stream!.removeTrack(track))
+  media.stream.addTrack(newAudioTrack)
+
+  // Replace track in all peer connections
+  get(participants).forEach(participant => {
+    const pc = participant.peerConnection
+    if (pc) {
+      const sender = pc.getSenders().find(s => s.track?.kind === 'audio')
+      if (sender) {
+        sender.replaceTrack(newAudioTrack)
+      }
+    }
+  })
+
+  localMedia.update(m => ({ ...m, audioEnabled: true, audioDeviceId: deviceId }))
+}
+
+// Start screen sharing
+export async function startScreenShare(): Promise<boolean> {
+  try {
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { cursor: 'always' } as any,
+      audio: false,
+    })
+
+    const screenTrack = screenStream.getVideoTracks()[0]
+
+    // Handle when user stops sharing via browser UI
+    screenTrack.onended = () => {
+      stopScreenShare()
+    }
+
+    // Replace video track in all peer connections with screen track
+    get(participants).forEach(participant => {
+      const pc = participant.peerConnection
+      if (pc) {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video')
+        if (sender) {
+          sender.replaceTrack(screenTrack)
+        }
+      }
+    })
+
+    localMedia.update(m => ({ ...m, screenStream, screenSharing: true }))
+    return true
+  } catch (err) {
+    console.error('Error starting screen share:', err)
+    return false
+  }
+}
+
+// Stop screen sharing
+export function stopScreenShare(): void {
+  const media = get(localMedia)
+
+  if (media.screenStream) {
+    media.screenStream.getTracks().forEach(track => track.stop())
+  }
+
+  // Restore camera track in all peer connections
+  const cameraTrack = media.stream?.getVideoTracks()[0]
+  if (cameraTrack) {
+    get(participants).forEach(participant => {
+      const pc = participant.peerConnection
+      if (pc) {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video')
+        if (sender) {
+          sender.replaceTrack(cameraTrack)
+        }
+      }
+    })
+  }
+
+  localMedia.update(m => ({ ...m, screenStream: null, screenSharing: false }))
+}
+
+// Toggle screen sharing
+export async function toggleScreenShare(): Promise<boolean> {
+  const media = get(localMedia)
+  if (media.screenSharing) {
+    stopScreenShare()
+    return false
+  } else {
+    return await startScreenShare()
+  }
 }
 
 async function sendSignal(payload: Omit<SignalPayload, 'from' | 'fromName' | 'timestamp'>): Promise<void> {

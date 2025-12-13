@@ -10,6 +10,7 @@
   export let audioEnabled: boolean = true
   export let videoEnabled: boolean = true
   export let isLocal: boolean = false
+  export let isScreenShare: boolean = false
 
   let videoElement: HTMLVideoElement
 
@@ -31,7 +32,9 @@
       autoplay
       playsinline
       {muted}
-      class="w-full h-full object-cover"
+      class="w-full h-full"
+      class:object-cover={!isScreenShare}
+      class:object-contain={isScreenShare}
       class:scale-x-[-1]={mirrored}
     ></video>
   {:else}
@@ -45,6 +48,9 @@
     {#if !audioEnabled}
       <span class="i-carbon-microphone-off text-red-500"></span>
     {/if}
+    {#if isScreenShare}
+      <span class="i-carbon-screen text-primary"></span>
+    {/if}
     <Avatar {pubkey} size={20} />
     <Name {pubkey} />
     {#if isLocal}
@@ -53,7 +59,7 @@
   </div>
 
   <!-- Video off indicator -->
-  {#if !videoEnabled}
+  {#if !videoEnabled && !isScreenShare}
     <div class="absolute top-2 right-2 p-1 bg-black/60 rounded-md">
       <span class="i-carbon-video-off text-red-500"></span>
     </div>

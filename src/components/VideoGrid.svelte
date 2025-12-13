@@ -19,13 +19,14 @@
 >
   <!-- Local video -->
   <VideoTile
-    stream={$localMedia.stream}
+    stream={$localMedia.screenSharing ? $localMedia.screenStream : $localMedia.stream}
     pubkey={$identity?.pubkey || ''}
     muted={true}
-    mirrored={true}
+    mirrored={!$localMedia.screenSharing}
     audioEnabled={$localMedia.audioEnabled}
-    videoEnabled={$localMedia.videoEnabled}
+    videoEnabled={$localMedia.videoEnabled || $localMedia.screenSharing}
     isLocal={true}
+    isScreenShare={$localMedia.screenSharing}
   />
 
   <!-- Remote participants -->

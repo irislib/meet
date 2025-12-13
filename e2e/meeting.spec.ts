@@ -22,10 +22,13 @@ test.describe('Meeting Creation', () => {
     await expect(page.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
 
     // Should have microphone toggle
-    await expect(page.getByTitle(/microphone/i)).toBeVisible();
+    await expect(page.getByTitle(/Mute microphone/i)).toBeVisible();
 
     // Should have camera toggle
-    await expect(page.getByTitle(/camera/i)).toBeVisible();
+    await expect(page.getByTitle(/Turn off camera/i)).toBeVisible();
+
+    // Should have screen share button
+    await expect(page.getByTitle('Share screen')).toBeVisible();
   });
 
   test('can copy meeting link from meeting room', async ({ page }) => {
