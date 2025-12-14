@@ -72,6 +72,45 @@ export const unreadCount = writable<number>(0)
 // Kind for signaling events
 const SIGNAL_KIND = 25050
 
+// Persist media preferences
+const MEDIA_PREFS_KEY = 'iris-meet-media-prefs'
+
+interface MediaPrefs {
+  audioEnabled: boolean
+  videoEnabled: boolean
+}
+
+function loadMediaPrefs(): MediaPrefs {
+  try {
+    const stored = localStorage.getItem(MEDIA_PREFS_KEY)
+    if (stored) {
+      return JSON.parse(stored)
+    }
+  } catch {
+    // ignore
+  }
+  return { audioEnabled: false, videoEnabled: false }
+}
+
+function saveMediaPrefs(prefs: MediaPrefs): void {
+  try {
+    localStorage.setItem(MEDIA_PREFS_KEY, JSON.stringify(prefs))
+  } catch {
+    // ignore
+  }
+}
+
+// Restore media based on saved preferences
+export async function restoreMediaPrefs(): Promise<void> {
+  const prefs = loadMediaPrefs()
+  if (prefs.audioEnabled) {
+    await toggleAudio()
+  }
+  if (prefs.videoEnabled) {
+    await toggleVideo()
+  }
+}
+
 let meetingEncryption: MeetingEncryption | null = null
 let meetingSigner: NDKPrivateKeySigner | null = null
 let signalSubscription: NDKSubscription | null = null
@@ -123,6 +162,7 @@ export async function toggleAudio(): Promise<boolean> {
       track.enabled = false
     })
     localMedia.update(m => ({ ...m, audioEnabled: false }))
+    saveMediaPrefs({ audioEnabled: false, videoEnabled: media.videoEnabled })
     broadcastMediaState()
     return false
   }
@@ -134,6 +174,7 @@ export async function toggleAudio(): Promise<boolean> {
       track.enabled = true
     })
     localMedia.update(m => ({ ...m, audioEnabled: true }))
+    saveMediaPrefs({ audioEnabled: true, videoEnabled: media.videoEnabled })
     broadcastMediaState()
     return true
   }
@@ -168,6 +209,7 @@ export async function toggleAudio(): Promise<boolean> {
       audioEnabled: true,
       audioDeviceId,
     }))
+    saveMediaPrefs({ audioEnabled: true, videoEnabled: media.videoEnabled })
     broadcastMediaState()
     return true
   } catch (err) {
@@ -185,6 +227,7 @@ export async function toggleVideo(): Promise<boolean> {
       track.enabled = false
     })
     localMedia.update(m => ({ ...m, videoEnabled: false }))
+    saveMediaPrefs({ audioEnabled: media.audioEnabled, videoEnabled: false })
     broadcastMediaState()
     return false
   }
@@ -196,6 +239,7 @@ export async function toggleVideo(): Promise<boolean> {
       track.enabled = true
     })
     localMedia.update(m => ({ ...m, videoEnabled: true }))
+    saveMediaPrefs({ audioEnabled: media.audioEnabled, videoEnabled: true })
     broadcastMediaState()
     return true
   }
@@ -230,6 +274,7 @@ export async function toggleVideo(): Promise<boolean> {
       videoEnabled: true,
       videoDeviceId,
     }))
+    saveMediaPrefs({ audioEnabled: media.audioEnabled, videoEnabled: true })
     broadcastMediaState()
     return true
   } catch (err) {
@@ -538,6 +583,34 @@ function createPeerConnection(remotePubkey: string, initiator: boolean): RTCPeer
     console.log(`Connection state with ${remotePubkey.slice(0, 8)}: ${pc.connectionState}`)
     if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
       removeParticipant(remotePubkey)
+    }
+  }
+
+  // Handle renegotiation (when tracks are added after connection established)
+  pc.onnegotiationneeded = async () => {
+    const currentIdentity = get(identity)
+    if (!currentIdentity) return
+
+    // Use polite/impolite pattern - impolite peer initiates offers
+    const weArePolite = currentIdentity.pubkey < remotePubkey
+    if (weArePolite) {
+      // Polite peer waits for offer from impolite peer
+      // But we need to signal that we need renegotiation
+      // For now, both sides can create offers and glare handling will resolve
+    }
+
+    console.log(`Renegotiation needed with ${remotePubkey.slice(0, 8)}`)
+    try {
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+
+      await sendSignal({
+        type: 'offer',
+        to: remotePubkey,
+        data: pc.localDescription?.toJSON(),
+      })
+    } catch (err) {
+      console.error('Error during renegotiation:', err)
     }
   }
 

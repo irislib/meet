@@ -3,7 +3,7 @@
   import VideoGrid from './VideoGrid.svelte'
   import Controls from './Controls.svelte'
   import Chat from './Chat.svelte'
-  import { joinRoom, leaveRoom, toggleAudio, toggleVideo } from '../lib/webrtc'
+  import { joinRoom, leaveRoom, toggleAudio, toggleVideo, restoreMediaPrefs } from '../lib/webrtc'
   import { getMeetingLink, type Meeting } from '../lib/meeting'
 
   export let meeting: Meeting
@@ -36,6 +36,9 @@
     try {
       // Join the meeting room (camera/mic start off, user enables when ready)
       await joinRoom(meeting.privkeyHex)
+
+      // Restore previous camera/mic preferences
+      await restoreMediaPrefs()
 
       joining = false
     } catch (e) {
