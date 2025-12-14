@@ -22,12 +22,16 @@
     videoDevices = devices.videoInputs
   }
 
-  function handleToggleAudio() {
-    toggleAudio()
+  async function handleToggleAudio() {
+    await toggleAudio()
+    // Reload devices after first permission grant
+    await loadDevices()
   }
 
-  function handleToggleVideo() {
-    toggleVideo()
+  async function handleToggleVideo() {
+    await toggleVideo()
+    // Reload devices after first permission grant
+    await loadDevices()
   }
 
   async function handleToggleScreenShare() {

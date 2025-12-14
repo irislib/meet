@@ -3,7 +3,7 @@
   import VideoGrid from './VideoGrid.svelte'
   import Controls from './Controls.svelte'
   import Chat from './Chat.svelte'
-  import { joinRoom, leaveRoom, getLocalStream, toggleAudio, toggleVideo } from '../lib/webrtc'
+  import { joinRoom, leaveRoom, toggleAudio, toggleVideo } from '../lib/webrtc'
   import { getMeetingLink, type Meeting } from '../lib/meeting'
 
   export let meeting: Meeting
@@ -34,10 +34,7 @@
     window.addEventListener('keydown', handleKeydown)
 
     try {
-      // Get local media first
-      await getLocalStream(true, true)
-
-      // Join the meeting room
+      // Join the meeting room (camera/mic start off, user enables when ready)
       await joinRoom(meeting.privkeyHex)
 
       joining = false

@@ -23,6 +23,17 @@ export interface ChatMessage {
   timestamp: number
 }
 
+// Data channel message types
+interface DataChannelMessage {
+  type: 'chat' | 'profile'
+  data: any
+}
+
+interface ProfileData {
+  name: string
+  picture?: string
+}
+
 export interface LocalMedia {
   stream: MediaStream | null
   screenStream: MediaStream | null
@@ -53,8 +64,8 @@ export const participants = writable<Map<string, Participant>>(new Map())
 export const localMedia = writable<LocalMedia>({
   stream: null,
   screenStream: null,
-  audioEnabled: true,
-  videoEnabled: true,
+  audioEnabled: false,
+  videoEnabled: false,
   screenSharing: false,
   audioDeviceId: null,
   videoDeviceId: null,
@@ -107,38 +118,128 @@ export async function getLocalStream(video = true, audio = true): Promise<MediaS
   return stream
 }
 
-export function toggleAudio(): boolean {
+export async function toggleAudio(): Promise<boolean> {
   const media = get(localMedia)
-  if (!media.stream) return false
 
-  const audioTracks = media.stream.getAudioTracks()
-  const newState = !media.audioEnabled
+  // If currently enabled, just disable
+  if (media.audioEnabled && media.stream) {
+    media.stream.getAudioTracks().forEach(track => {
+      track.enabled = false
+    })
+    localMedia.update(m => ({ ...m, audioEnabled: false }))
+    broadcastMediaState()
+    return false
+  }
 
-  audioTracks.forEach(track => {
-    track.enabled = newState
-  })
+  // Need to enable - check if we have audio track
+  if (media.stream && media.stream.getAudioTracks().length > 0) {
+    // Already have track, just enable it
+    media.stream.getAudioTracks().forEach(track => {
+      track.enabled = true
+    })
+    localMedia.update(m => ({ ...m, audioEnabled: true }))
+    broadcastMediaState()
+    return true
+  }
 
-  localMedia.update(m => ({ ...m, audioEnabled: newState }))
-  broadcastMediaState()
+  // No audio track yet - request permission
+  try {
+    const audioStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true },
+    })
 
-  return newState
+    const audioTrack = audioStream.getAudioTracks()[0]
+    const audioDeviceId = audioTrack?.getSettings().deviceId || null
+
+    // Create or add to existing stream
+    if (media.stream) {
+      media.stream.addTrack(audioTrack)
+    } else {
+      localMedia.update(m => ({ ...m, stream: audioStream }))
+    }
+
+    // Add track to all peer connections
+    get(participants).forEach(participant => {
+      const pc = participant.peerConnection
+      if (pc) {
+        pc.addTrack(audioTrack, media.stream || audioStream)
+      }
+    })
+
+    localMedia.update(m => ({
+      ...m,
+      stream: m.stream || audioStream,
+      audioEnabled: true,
+      audioDeviceId,
+    }))
+    broadcastMediaState()
+    return true
+  } catch (err) {
+    console.error('Error getting audio:', err)
+    return false
+  }
 }
 
-export function toggleVideo(): boolean {
+export async function toggleVideo(): Promise<boolean> {
   const media = get(localMedia)
-  if (!media.stream) return false
 
-  const videoTracks = media.stream.getVideoTracks()
-  const newState = !media.videoEnabled
+  // If currently enabled, just disable
+  if (media.videoEnabled && media.stream) {
+    media.stream.getVideoTracks().forEach(track => {
+      track.enabled = false
+    })
+    localMedia.update(m => ({ ...m, videoEnabled: false }))
+    broadcastMediaState()
+    return false
+  }
 
-  videoTracks.forEach(track => {
-    track.enabled = newState
-  })
+  // Need to enable - check if we have video track
+  if (media.stream && media.stream.getVideoTracks().length > 0) {
+    // Already have track, just enable it
+    media.stream.getVideoTracks().forEach(track => {
+      track.enabled = true
+    })
+    localMedia.update(m => ({ ...m, videoEnabled: true }))
+    broadcastMediaState()
+    return true
+  }
 
-  localMedia.update(m => ({ ...m, videoEnabled: newState }))
-  broadcastMediaState()
+  // No video track yet - request permission
+  try {
+    const videoStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+    })
 
-  return newState
+    const videoTrack = videoStream.getVideoTracks()[0]
+    const videoDeviceId = videoTrack?.getSettings().deviceId || null
+
+    // Create or add to existing stream
+    if (media.stream) {
+      media.stream.addTrack(videoTrack)
+    } else {
+      localMedia.update(m => ({ ...m, stream: videoStream }))
+    }
+
+    // Add track to all peer connections
+    get(participants).forEach(participant => {
+      const pc = participant.peerConnection
+      if (pc) {
+        pc.addTrack(videoTrack, media.stream || videoStream)
+      }
+    })
+
+    localMedia.update(m => ({
+      ...m,
+      stream: m.stream || videoStream,
+      videoEnabled: true,
+      videoDeviceId,
+    }))
+    broadcastMediaState()
+    return true
+  } catch (err) {
+    console.error('Error getting video:', err)
+    return false
+  }
 }
 
 export function stopLocalStream(): void {
@@ -149,7 +250,7 @@ export function stopLocalStream(): void {
   if (media.screenStream) {
     media.screenStream.getTracks().forEach(track => track.stop())
   }
-  localMedia.set({ stream: null, screenStream: null, audioEnabled: true, videoEnabled: true, screenSharing: false, audioDeviceId: null, videoDeviceId: null })
+  localMedia.set({ stream: null, screenStream: null, audioEnabled: false, videoEnabled: false, screenSharing: false, audioDeviceId: null, videoDeviceId: null })
 }
 
 // Get available media devices
@@ -338,11 +439,25 @@ async function broadcastMediaState(): Promise<void> {
 function setupDataChannel(dc: RTCDataChannel, remotePubkey: string): void {
   dc.onmessage = (event) => {
     try {
-      const msg = JSON.parse(event.data) as ChatMessage
-      chatMessages.update(msgs => [...msgs, msg])
-      unreadCount.update(n => n + 1)
+      const msg = JSON.parse(event.data) as DataChannelMessage
+
+      if (msg.type === 'profile') {
+        // Update participant's display name from profile
+        const profile = msg.data as ProfileData
+        participants.update(p => {
+          const participant = p.get(remotePubkey)
+          if (participant && profile.name) {
+            participant.displayName = profile.name
+          }
+          return new Map(p)
+        })
+      } else if (msg.type === 'chat') {
+        const chatMsg = msg.data as ChatMessage
+        chatMessages.update(msgs => [...msgs, chatMsg])
+        unreadCount.update(n => n + 1)
+      }
     } catch (err) {
-      console.warn('Failed to parse chat message:', err)
+      console.warn('Failed to parse data channel message:', err)
     }
   }
 
@@ -355,6 +470,16 @@ function setupDataChannel(dc: RTCDataChannel, remotePubkey: string): void {
       }
       return new Map(p)
     })
+
+    // Send our profile if we're not using NIP-07 (anonymous user with custom name)
+    const currentIdentity = get(identity)
+    if (currentIdentity && !currentIdentity.isNip07 && currentIdentity.displayName) {
+      const profileMsg: DataChannelMessage = {
+        type: 'profile',
+        data: { name: currentIdentity.displayName } as ProfileData,
+      }
+      dc.send(JSON.stringify(profileMsg))
+    }
   }
 
   dc.onclose = () => {
@@ -775,7 +900,8 @@ export function sendChatMessage(text: string): void {
   chatMessages.update(msgs => [...msgs, msg])
 
   // Send to all participants via data channel
-  const msgStr = JSON.stringify(msg)
+  const dcMsg: DataChannelMessage = { type: 'chat', data: msg }
+  const msgStr = JSON.stringify(dcMsg)
   get(participants).forEach(participant => {
     if (participant.dataChannel?.readyState === 'open') {
       participant.dataChannel.send(msgStr)

@@ -21,11 +21,11 @@ test.describe('Meeting Creation', () => {
     await page.getByRole('button', { name: 'Start Meeting' }).click();
     await expect(page.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
 
-    // Should have microphone toggle
-    await expect(page.getByTitle(/Mute microphone/i)).toBeVisible();
+    // Should have microphone toggle (starts OFF)
+    await expect(page.getByTitle(/Unmute microphone/i)).toBeVisible();
 
-    // Should have camera toggle
-    await expect(page.getByTitle(/Turn off camera/i)).toBeVisible();
+    // Should have camera toggle (starts OFF)
+    await expect(page.getByTitle(/Turn on camera/i)).toBeVisible();
 
     // Should have screen share button
     await expect(page.getByTitle('Share screen')).toBeVisible();
@@ -59,15 +59,15 @@ test.describe('Meeting Creation', () => {
     await page.getByRole('button', { name: 'Start Meeting' }).click();
     await expect(page.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
 
-    // Initially microphone should be enabled (unmuted)
-    const micButton = page.getByTitle('Mute microphone');
+    // Initially microphone should be disabled (muted)
+    const micButton = page.getByTitle('Unmute microphone');
     await expect(micButton).toBeVisible();
 
-    // Click to mute
+    // Click to unmute (this will request permissions)
     await micButton.click();
 
-    // Should now show unmute option
-    await expect(page.getByTitle('Unmute microphone')).toBeVisible();
+    // Should now show mute option
+    await expect(page.getByTitle('Mute microphone')).toBeVisible();
   });
 
   test('can toggle camera', async ({ page }) => {
@@ -75,15 +75,15 @@ test.describe('Meeting Creation', () => {
     await page.getByRole('button', { name: 'Start Meeting' }).click();
     await expect(page.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
 
-    // Initially camera should be enabled
-    const cameraButton = page.getByTitle('Turn off camera');
+    // Initially camera should be disabled
+    const cameraButton = page.getByTitle('Turn on camera');
     await expect(cameraButton).toBeVisible();
 
-    // Click to turn off
+    // Click to turn on (this will request permissions)
     await cameraButton.click();
 
-    // Should now show turn on option
-    await expect(page.getByTitle('Turn on camera')).toBeVisible();
+    // Should now show turn off option
+    await expect(page.getByTitle('Turn off camera')).toBeVisible();
   });
 });
 
