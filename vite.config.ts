@@ -42,7 +42,7 @@ export default defineConfig({
       },
     }),
   ],
-  base: process.env.GITHUB_PAGES ? '/iris-meet/' : '/',
+  base: process.env.GITHUB_PAGES ? '/meet/' : '/',
   server: {
     allowedHosts: true,
   },
