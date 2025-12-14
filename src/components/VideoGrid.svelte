@@ -6,7 +6,7 @@
   $: participantList = Array.from($participants.values())
   $: totalCount = participantList.length + 1 // +1 for local
 
-  // Calculate optimal columns for the participant count
+  // Calculate optimal columns for the participant count (desktop)
   $: cols = totalCount === 1 ? 1
           : totalCount === 2 ? 2
           : totalCount <= 4 ? 2
@@ -20,7 +20,7 @@
 
 <div class="flex flex-wrap justify-center content-center gap-4 p-4 w-full h-full">
   <!-- Local video -->
-  <div style="width: {tileWidth}; max-width: 100%;">
+  <div class="video-tile-wrapper" style="--desktop-width: {tileWidth};">
     <VideoTile
       stream={$localMedia.screenSharing ? $localMedia.screenStream : $localMedia.stream}
       pubkey={$identity?.pubkey || ''}
@@ -35,7 +35,7 @@
 
   <!-- Remote participants -->
   {#each participantList as participant (participant.pubkey)}
-    <div style="width: {tileWidth}; max-width: 100%;">
+    <div class="video-tile-wrapper" style="--desktop-width: {tileWidth};">
       <VideoTile
         stream={participant.stream}
         pubkey={participant.pubkey}
@@ -48,3 +48,16 @@
     </div>
   {/each}
 </div>
+
+<style>
+  .video-tile-wrapper {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  @media (min-width: 640px) {
+    .video-tile-wrapper {
+      width: var(--desktop-width);
+    }
+  }
+</style>
