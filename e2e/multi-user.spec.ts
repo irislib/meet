@@ -206,4 +206,63 @@ test.describe('Multi-user Meeting', () => {
 
     await context1.close();
   });
+
+  test('five users can join and see each other', async ({ browser }) => {
+    const NUM_USERS = 5;
+    const contexts = [];
+    const pages = [];
+
+    // Create browser contexts for all users
+    for (let i = 0; i < NUM_USERS; i++) {
+      const context = await browser.newContext({
+        permissions: ['camera', 'microphone'],
+      });
+      contexts.push(context);
+      const page = await context.newPage();
+      setupPageErrorHandler(page);
+      pages.push(page);
+    }
+
+    // User 1: Create meeting
+    await pages[0].goto('/');
+    await pages[0].getByPlaceholder('Name').fill('User1');
+    await pages[0].getByRole('button', { name: 'Join' }).click();
+    await expect(pages[0].getByRole('heading', { name: 'Start a Meeting' })).toBeVisible({ timeout: 15000 });
+    await pages[0].getByRole('button', { name: 'Start Meeting' }).click();
+    await expect(pages[0].getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
+
+    const meetingUrl = pages[0].url();
+    console.log('Meeting URL:', meetingUrl);
+
+    // Users 2-5: Join the meeting
+    for (let i = 1; i < NUM_USERS; i++) {
+      await pages[i].goto(meetingUrl);
+      await pages[i].getByPlaceholder('Name').fill(`User${i + 1}`);
+      await pages[i].getByRole('button', { name: 'Join Meeting' }).click();
+      await expect(pages[i].getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
+    }
+
+    // Verify all users see all 5 video tiles (including their own)
+    for (let i = 0; i < NUM_USERS; i++) {
+      await expect(pages[i].getByTestId('video-tile')).toHaveCount(NUM_USERS, { timeout: 30000 });
+    }
+
+    // Verify users can see each other's names
+    for (let i = 0; i < NUM_USERS; i++) {
+      // Each user should see their own "(You)" marker
+      await expect(pages[i].getByText('(You)')).toBeVisible();
+
+      // Each user should see all other users' names
+      for (let j = 0; j < NUM_USERS; j++) {
+        if (i !== j) {
+          await expect(pages[i].getByText(`User${j + 1}`)).toBeVisible({ timeout: 10000 });
+        }
+      }
+    }
+
+    // Clean up
+    for (const context of contexts) {
+      await context.close();
+    }
+  });
 });

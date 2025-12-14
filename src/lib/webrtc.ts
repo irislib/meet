@@ -6,6 +6,8 @@ import { getDisplayName } from './animalNames'
 import { createMeetingEncryption, type MeetingEncryption } from './encryption'
 import { getLocalProfile, addProfileToCache, type Profile } from './profile'
 
+export type ConnectionState = 'connecting' | 'connected' | 'failed'
+
 export interface Participant {
   pubkey: string
   displayName: string
@@ -14,6 +16,7 @@ export interface Participant {
   dataChannel: RTCDataChannel | null
   audioEnabled: boolean
   videoEnabled: boolean
+  connectionState: ConnectionState
 }
 
 export interface ChatMessage {
@@ -42,7 +45,7 @@ export interface LocalMedia {
 
 // Inner signed message (encrypted in the Nostr event)
 interface SignalPayload {
-  type: 'offer' | 'answer' | 'ice-candidate' | 'join' | 'leave' | 'media-state'
+  type: 'offer' | 'answer' | 'ice-candidate' | 'presence' | 'leave' | 'media-state'
   from: string // sender's identity pubkey
   fromName: string
   to?: string // target pubkey for direct messages
@@ -115,6 +118,7 @@ export async function restoreMediaPrefs(): Promise<void> {
 let meetingEncryption: MeetingEncryption | null = null
 let meetingSigner: NDKPrivateKeySigner | null = null
 let signalSubscription: NDKSubscription | null = null
+let presenceInterval: ReturnType<typeof setInterval> | null = null
 
 // ICE candidate queue per peer (for candidates received before remote description)
 const iceCandidateQueues = new Map<string, RTCIceCandidateInit[]>()
@@ -515,6 +519,7 @@ function setupDataChannel(dc: RTCDataChannel, remotePubkey: string): void {
       const participant = p.get(remotePubkey)
       if (participant) {
         participant.dataChannel = dc
+        participant.connectionState = 'connected'
       }
       return new Map(p)
     })
@@ -582,8 +587,21 @@ function createPeerConnection(remotePubkey: string, initiator: boolean): RTCPeer
   // Handle connection state changes
   pc.onconnectionstatechange = () => {
     console.log(`Connection state with ${remotePubkey.slice(0, 8)}: ${pc.connectionState}`)
-    if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-      removeParticipant(remotePubkey)
+    if (pc.connectionState === 'failed') {
+      participants.update(p => {
+        const participant = p.get(remotePubkey)
+        if (participant) {
+          participant.connectionState = 'failed'
+        }
+        return new Map(p)
+      })
+    } else if (pc.connectionState === 'disconnected') {
+      // Give a moment for reconnection before removing
+      setTimeout(() => {
+        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+          removeParticipant(remotePubkey)
+        }
+      }, 5000)
     }
   }
 
@@ -669,8 +687,8 @@ async function handleSignalMessage(payload: SignalPayload): Promise<void> {
   }
 
   switch (payload.type) {
-    case 'join':
-      await handleJoin(payload)
+    case 'presence':
+      await handlePresence(payload)
       break
     case 'offer':
       await handleOffer(payload)
@@ -690,15 +708,21 @@ async function handleSignalMessage(payload: SignalPayload): Promise<void> {
   }
 }
 
-async function handleJoin(payload: SignalPayload): Promise<void> {
+async function handlePresence(payload: SignalPayload): Promise<void> {
   const currentIdentity = get(identity)
   if (!currentIdentity) return
 
-  console.log(`${payload.fromName} joined the room`)
+  // Check if we already have an active connection
+  const existingParticipant = get(participants).get(payload.from)
+  if (existingParticipant?.peerConnection) {
+    // Already connected, ignore presence
+    return
+  }
+
+  console.log(`New peer discovered: ${payload.fromName}`)
 
   // Create participant entry if not exists
-  const existingParticipants = get(participants)
-  if (!existingParticipants.has(payload.from)) {
+  if (!existingParticipant) {
     participants.update(p => {
       p.set(payload.from, {
         pubkey: payload.from,
@@ -708,6 +732,7 @@ async function handleJoin(payload: SignalPayload): Promise<void> {
         dataChannel: null,
         audioEnabled: true,
         videoEnabled: true,
+        connectionState: 'connecting',
       })
       return new Map(p)
     })
@@ -716,13 +741,6 @@ async function handleJoin(payload: SignalPayload): Promise<void> {
   // Use deterministic polite/impolite peer to avoid glare
   // Lower pubkey is "polite" (waits), higher is "impolite" (initiates)
   const weArePolite = currentIdentity.pubkey < payload.from
-
-  // Check if we already have an active connection attempt
-  const participant = get(participants).get(payload.from)
-  if (participant?.peerConnection) {
-    // Already have a connection, don't create another
-    return
-  }
 
   if (!weArePolite) {
     // We initiate the connection (create offer) and data channel
@@ -749,10 +767,9 @@ async function handleJoin(payload: SignalPayload): Promise<void> {
       console.error('Error creating offer:', err)
     }
   } else {
-    // We're polite - respond with our own join so they know we exist
-    // (they may have joined after our original join message was sent)
+    // We're polite - respond with presence so they know we exist and can send offer
     await sendSignal({
-      type: 'join',
+      type: 'presence',
     })
   }
 }
@@ -796,6 +813,7 @@ async function handleOffer(payload: SignalPayload): Promise<void> {
           dataChannel: null,
           audioEnabled: true,
           videoEnabled: true,
+          connectionState: 'connecting',
         })
       } else {
         p.get(payload.from)!.peerConnection = pc
@@ -917,13 +935,30 @@ export async function joinRoom(meetingPrivkeyHex: string): Promise<void> {
     }
   })
 
-  // Announce join
+  // Announce presence
   await sendSignal({
-    type: 'join',
+    type: 'presence',
   })
+
+  // Periodically announce presence for peer discovery reliability
+  presenceInterval = setInterval(async () => {
+    try {
+      await sendSignal({
+        type: 'presence',
+      })
+    } catch {
+      // Ignore errors
+    }
+  }, 15000) // Every 15 seconds
 }
 
 export async function leaveRoom(): Promise<void> {
+  // Stop presence announcements
+  if (presenceInterval) {
+    clearInterval(presenceInterval)
+    presenceInterval = null
+  }
+
   if (meetingEncryption) {
     try {
       await sendSignal({
@@ -954,6 +989,7 @@ export async function leaveRoom(): Promise<void> {
   iceCandidateQueues.clear()
   chatMessages.set([])
   unreadCount.set(0)
+  focusedPubkey.set(null)
 }
 
 export function getMeetingPubkey(): string | null {

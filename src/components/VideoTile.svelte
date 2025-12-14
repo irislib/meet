@@ -2,6 +2,7 @@
   import { onDestroy, createEventDispatcher } from 'svelte'
   import Avatar from './Avatar.svelte'
   import Name from './Name.svelte'
+  import type { ConnectionState } from '../lib/webrtc'
 
   export let stream: MediaStream | null = null
   export let pubkey: string = ''
@@ -11,6 +12,7 @@
   export let videoEnabled: boolean = true
   export let isLocal: boolean = false
   export let isScreenShare: boolean = false
+  export let connectionState: ConnectionState = 'connected'
 
   const dispatch = createEventDispatcher<{ click: { pubkey: string } }>()
 
@@ -75,6 +77,23 @@
   {#if !videoEnabled && !isScreenShare}
     <div class="absolute top-2 right-2 p-1 bg-black/60 rounded-md">
       <span class="i-carbon-video-off text-red-500"></span>
+    </div>
+  {/if}
+
+  <!-- Connection state overlay -->
+  {#if !isLocal && connectionState === 'connecting'}
+    <div class="absolute inset-0 bg-black/40 flex items-center justify-center">
+      <div class="text-center">
+        <div class="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+        <span class="text-sm text-white">Connecting...</span>
+      </div>
+    </div>
+  {:else if !isLocal && connectionState === 'failed'}
+    <div class="absolute inset-0 bg-black/40 flex items-center justify-center">
+      <div class="text-center">
+        <span class="i-carbon-warning text-2xl text-red-500 mb-2"></span>
+        <span class="text-sm text-white block">Connection failed</span>
+      </div>
     </div>
   {/if}
 </div>

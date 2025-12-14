@@ -86,6 +86,7 @@
           mirrored={false}
           audioEnabled={focusedParticipant.audioEnabled}
           videoEnabled={focusedParticipant.videoEnabled}
+          connectionState={focusedParticipant.connectionState}
           isLocal={false}
           on:click={() => handleTileClick(focusedParticipant.pubkey)}
         />
@@ -116,6 +117,7 @@
             mirrored={false}
             audioEnabled={participant.audioEnabled}
             videoEnabled={participant.videoEnabled}
+            connectionState={participant.connectionState}
             isLocal={false}
             on:click={() => handleTileClick(participant.pubkey)}
           />
@@ -151,6 +153,7 @@
         mirrored={false}
         audioEnabled={participant.audioEnabled}
         videoEnabled={participant.videoEnabled}
+        connectionState={participant.connectionState}
         isLocal={false}
         on:click={() => handleTileClick(participant.pubkey)}
       />
