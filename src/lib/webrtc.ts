@@ -581,11 +581,23 @@ function createPeerConnection(remotePubkey: string, createDataChannel: boolean):
     setupDataChannel(event.channel, remotePubkey)
   }
 
-  // Add local tracks
+  // Add local tracks and ensure we can receive audio/video even if not sending
+  const hasAudio = media.stream?.getAudioTracks().length > 0
+  const hasVideo = media.stream?.getVideoTracks().length > 0
+
   if (media.stream) {
     media.stream.getTracks().forEach(track => {
       pc.addTrack(track, media.stream!)
     })
+  }
+
+  // Add receive-only transceivers for media types we're not sending
+  // This ensures SDP includes audio/video sections so we can receive remote tracks
+  if (!hasAudio) {
+    pc.addTransceiver('audio', { direction: 'recvonly' })
+  }
+  if (!hasVideo) {
+    pc.addTransceiver('video', { direction: 'recvonly' })
   }
 
   // Handle ICE candidates
@@ -755,6 +767,13 @@ async function handlePresence(payload: SignalPayload): Promise<void> {
 
   console.log(`New peer discovered: ${payload.fromName}`)
 
+  // Add to profile cache so Name component can display immediately
+  addProfileToCache({
+    pubkey: payload.from,
+    name: payload.fromName,
+    display_name: payload.fromName,
+  })
+
   // Create participant entry if not exists
   if (!existingParticipant) {
     participants.update(p => {
@@ -793,6 +812,13 @@ async function handleOffer(payload: SignalPayload): Promise<void> {
   if (!currentIdentity) return
 
   console.log(`Received offer from ${payload.fromName}`)
+
+  // Add to profile cache so Name component can display immediately
+  addProfileToCache({
+    pubkey: payload.from,
+    name: payload.fromName,
+    display_name: payload.fromName,
+  })
 
   // Deterministic: lower pubkey is "polite" (yields on collision)
   const weArePolite = currentIdentity.pubkey < payload.from
