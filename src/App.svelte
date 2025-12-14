@@ -82,7 +82,7 @@
   {:else if view === 'login'}
     <div class="min-h-screen flex flex-col items-center justify-center p-4">
       <div class="mb-8 text-center flex flex-col items-center select-none">
-        <img src="/iris-logo.png" alt="Iris" class="w-16 h-16 mb-4" draggable="false" />
+        <img src={`${import.meta.env.BASE_URL}iris-logo.png`} alt="Iris" class="w-16 h-16 mb-4" draggable="false" />
         <h1 class="text-4xl font-bold">
           <span class="text-primary">Iris</span> Meet
         </h1>
@@ -94,7 +94,7 @@
       <!-- Header -->
       <header class="h-16 px-4 flex items-center justify-between border-b border-surface-lighter">
         <div class="flex items-center gap-2 select-none">
-          <img src="/iris-logo.png" alt="Iris" class="w-8 h-8" draggable="false" />
+          <img src={`${import.meta.env.BASE_URL}iris-logo.png`} alt="Iris" class="w-8 h-8" draggable="false" />
           <h1 class="text-xl font-bold">
             <span class="text-primary">Iris</span> Meet
           </h1>
