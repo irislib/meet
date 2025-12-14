@@ -127,6 +127,7 @@ let meetingEncryption: MeetingEncryption | null = null
 let meetingSigner: NDKPrivateKeySigner | null = null
 let signalSubscription: NDKSubscription | null = null
 let presenceInterval: ReturnType<typeof setInterval> | null = null
+let joinedAt: number = 0 // Unix timestamp (seconds) when we joined
 
 // ICE candidate queue per peer (for candidates received before remote description)
 const iceCandidateQueues = new Map<string, RTCIceCandidateInit[]>()
@@ -581,23 +582,11 @@ function createPeerConnection(remotePubkey: string, createDataChannel: boolean):
     setupDataChannel(event.channel, remotePubkey)
   }
 
-  // Add local tracks and ensure we can receive audio/video even if not sending
-  const hasAudio = media.stream?.getAudioTracks().length > 0
-  const hasVideo = media.stream?.getVideoTracks().length > 0
-
+  // Add local tracks
   if (media.stream) {
     media.stream.getTracks().forEach(track => {
       pc.addTrack(track, media.stream!)
     })
-  }
-
-  // Add receive-only transceivers for media types we're not sending
-  // This ensures SDP includes audio/video sections so we can receive remote tracks
-  if (!hasAudio) {
-    pc.addTransceiver('audio', { direction: 'recvonly' })
-  }
-  if (!hasVideo) {
-    pc.addTransceiver('video', { direction: 'recvonly' })
   }
 
   // Handle ICE candidates
@@ -633,6 +622,8 @@ function createPeerConnection(remotePubkey: string, createDataChannel: boolean):
         }
         return new Map(p)
       })
+      // Remove failed connections after a short delay
+      setTimeout(() => removeParticipant(remotePubkey), 3000)
     } else if (pc.connectionState === 'disconnected') {
       // Give a moment for reconnection before removing
       setTimeout(() => {
@@ -642,6 +633,15 @@ function createPeerConnection(remotePubkey: string, createDataChannel: boolean):
       }, 5000)
     }
   }
+
+  // Connection timeout - remove if still connecting after 15 seconds
+  setTimeout(() => {
+    const participant = get(participants).get(remotePubkey)
+    if (participant?.connectionState === 'connecting') {
+      console.log(`Connection timeout for ${remotePubkey.slice(0, 8)}`)
+      removeParticipant(remotePubkey)
+    }
+  }, 15000)
 
   // Handle negotiation (perfect negotiation pattern)
   pc.onnegotiationneeded = async () => {
@@ -958,18 +958,26 @@ export async function joinRoom(meetingPrivkeyHex: string): Promise<void> {
   iceCandidateQueues.clear()
   makingOffer.clear()
 
+  // Record when we joined (with small buffer for clock skew)
+  joinedAt = Math.floor(Date.now() / 1000) - 5
+
   // Subscribe to signals authored by the meeting's pubkey
   signalSubscription = ndkInstance.subscribe(
     {
       kinds: [SIGNAL_KIND],
       authors: [meetingEncryption.roomPubkey],
-      since: Math.floor(Date.now() / 1000) - 60,
+      since: joinedAt,
     },
     { closeOnEose: false }
   )
 
   signalSubscription.on('event', async (event: NDKEvent) => {
     try {
+      // Ignore events older than when we joined (relay may return stale data)
+      if (event.created_at && event.created_at < joinedAt) {
+        return
+      }
+
       // Decrypt the message using the meeting key
       const plaintext = meetingEncryption!.decrypt(event.content, meetingEncryption!.roomPubkey)
       const payload = JSON.parse(plaintext) as SignalPayload
