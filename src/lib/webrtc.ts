@@ -3,7 +3,7 @@ import type NDK from '@nostr-dev-kit/ndk'
 import { NDKEvent, NDKSubscription, NDKPrivateKeySigner } from '@nostr-dev-kit/ndk'
 import { identity, ndk } from './identity'
 import { getDisplayName } from './animalNames'
-import { createMeetingEncryption, type MeetingEncryption } from './encryption'
+import { createMeetingEncryption, encryptForPeer, decryptFromPeer, type MeetingEncryption } from './encryption'
 import { getLocalProfile, addProfileToCache, type Profile } from './profile'
 
 export type ConnectionState = 'connecting' | 'connected' | 'failed'
@@ -43,14 +43,15 @@ export interface LocalMedia {
   videoDeviceId: string | null
 }
 
-// Inner signed message (encrypted in the Nostr event)
+// Inner message (encrypted in the Nostr event)
+// Direct messages (offer/answer/ice-candidate) have their data field further encrypted
+// with a conversation key between sender and recipient for true E2E encryption
 interface SignalPayload {
   type: 'offer' | 'answer' | 'ice-candidate' | 'presence' | 'leave' | 'media-state'
   from: string // sender's identity pubkey
   fromName: string
   to?: string // target pubkey for direct messages
-  data?: any
-  timestamp: number
+  data?: any // for direct messages, this is encrypted with sender↔recipient key
 }
 
 const ICE_SERVERS: RTCIceServer[] = [
@@ -454,16 +455,30 @@ export async function toggleScreenShare(): Promise<boolean> {
   }
 }
 
-async function sendSignal(payload: Omit<SignalPayload, 'from' | 'fromName' | 'timestamp'>): Promise<void> {
+async function sendSignal(payload: Omit<SignalPayload, 'from' | 'fromName'>): Promise<void> {
   const ndkInstance = get(ndk)
   const currentIdentity = get(identity)
   if (!ndkInstance || !currentIdentity || !meetingEncryption || !meetingSigner) return
 
+  const isDirectMessage = payload.to && ['offer', 'answer', 'ice-candidate'].includes(payload.type)
+
+  // For direct messages, encrypt the data field with sender↔recipient key
+  let dataToSend = payload.data
+  if (isDirectMessage && payload.data) {
+    const encryptedData = await encryptForPeer(payload.data, payload.to!)
+    if (!encryptedData) {
+      console.error('Failed to encrypt data for peer')
+      return
+    }
+    dataToSend = encryptedData
+  }
+
   const fullPayload: SignalPayload = {
-    ...payload,
+    type: payload.type,
     from: currentIdentity.pubkey,
     fromName: getDisplayName(currentIdentity.pubkey, currentIdentity.displayName),
-    timestamp: Date.now(),
+    to: payload.to,
+    data: dataToSend,
   }
 
   // Encrypt the payload with the meeting key
@@ -670,7 +685,7 @@ async function processQueuedIceCandidates(pubkey: string, pc: RTCPeerConnection)
   iceCandidateQueues.delete(pubkey)
 }
 
-async function handleSignalMessage(payload: SignalPayload): Promise<void> {
+async function handleSignalMessage(payload: SignalPayload, eventId: string): Promise<void> {
   const currentIdentity = get(identity)
   if (!currentIdentity) return
 
@@ -680,15 +695,29 @@ async function handleSignalMessage(payload: SignalPayload): Promise<void> {
   // Ignore targeted messages not for us
   if (payload.to && payload.to !== currentIdentity.pubkey) return
 
-  // Deduplicate messages
-  const msgId = `${payload.from}-${payload.type}-${payload.timestamp}`
-  if (processedMessages.has(msgId)) return
-  processedMessages.add(msgId)
+  // Deduplicate by event ID (unique per Nostr event)
+  if (processedMessages.has(eventId)) return
+  processedMessages.add(eventId)
 
   // Clean up old message IDs (keep last 1000)
   if (processedMessages.size > 1000) {
     const arr = Array.from(processedMessages)
     arr.slice(0, 500).forEach(id => processedMessages.delete(id))
+  }
+
+  // For direct messages, decrypt the data field using sender's pubkey
+  const isDirectMessage = payload.to && ['offer', 'answer', 'ice-candidate'].includes(payload.type)
+  if (isDirectMessage && payload.data && typeof payload.data === 'string') {
+    try {
+      payload.data = await decryptFromPeer(payload.data, payload.from)
+      if (!payload.data) {
+        console.error('Failed to decrypt direct message data')
+        return
+      }
+    } catch (err) {
+      console.error('Error decrypting direct message:', err)
+      return
+    }
   }
 
   switch (payload.type) {
@@ -918,7 +947,7 @@ export async function joinRoom(meetingPrivkeyHex: string): Promise<void> {
       // Decrypt the message using the meeting key
       const plaintext = meetingEncryption!.decrypt(event.content, meetingEncryption!.roomPubkey)
       const payload = JSON.parse(plaintext) as SignalPayload
-      await handleSignalMessage(payload)
+      await handleSignalMessage(payload, event.id)
     } catch (err) {
       // Silently ignore decryption errors (could be old messages or from other meetings)
     }

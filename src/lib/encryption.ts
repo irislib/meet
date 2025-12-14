@@ -61,6 +61,69 @@ export function createMeetingEncryption(roomPrivkeyHex: string): MeetingEncrypti
   }
 }
 
+// Encrypt data for a specific peer using identity keys (for E2E direct messages)
+export async function encryptForPeer(
+  data: any,
+  recipientPubkey: string
+): Promise<string | null> {
+  const currentIdentity = get(identity)
+  if (!currentIdentity) return null
+
+  const plaintext = JSON.stringify(data)
+
+  if (currentIdentity.isNip07) {
+    if (window.nostr?.nip44) {
+      return await window.nostr.nip44.encrypt(recipientPubkey, plaintext)
+    }
+    if (window.nostr?.nip04) {
+      return await window.nostr.nip04.encrypt(recipientPubkey, plaintext)
+    }
+    throw new Error('NIP-07 extension does not support encryption')
+  }
+
+  const signer = currentIdentity.signer as NDKPrivateKeySigner
+  const privkey = signer.privateKey
+  if (!privkey) throw new Error('No private key available')
+
+  const conversationKey = nip44.v2.utils.getConversationKey(hexToBytes(privkey), recipientPubkey)
+  return nip44.v2.encrypt(plaintext, conversationKey)
+}
+
+// Decrypt data from a specific peer using identity keys (for E2E direct messages)
+export async function decryptFromPeer(
+  ciphertext: string,
+  senderPubkey: string
+): Promise<any | null> {
+  const currentIdentity = get(identity)
+  if (!currentIdentity) return null
+
+  let plaintext: string
+
+  if (currentIdentity.isNip07) {
+    if (window.nostr?.nip44) {
+      plaintext = await window.nostr.nip44.decrypt(senderPubkey, ciphertext)
+    } else if (window.nostr?.nip04) {
+      plaintext = await window.nostr.nip04.decrypt(senderPubkey, ciphertext)
+    } else {
+      throw new Error('NIP-07 extension does not support decryption')
+    }
+  } else {
+    const signer = currentIdentity.signer as NDKPrivateKeySigner
+    const privkey = signer.privateKey
+    if (!privkey) throw new Error('No private key available')
+
+    const conversationKey = nip44.v2.utils.getConversationKey(hexToBytes(privkey), senderPubkey)
+    plaintext = nip44.v2.decrypt(ciphertext, conversationKey)
+  }
+
+  try {
+    return JSON.parse(plaintext)
+  } catch {
+    console.error('Failed to parse decrypted data')
+    return null
+  }
+}
+
 // Encrypt a signaling message for a specific peer
 export async function encryptSignal(
   message: object,
