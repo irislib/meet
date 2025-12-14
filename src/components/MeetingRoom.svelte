@@ -80,7 +80,7 @@
 <div class="fixed inset-0 bg-surface-dark flex flex-col">
   <!-- Main content -->
   <div class="flex-1 overflow-hidden flex">
-    <div class="flex-1 pb-20">
+    <div class="flex-1 pb-20 overflow-hidden">
       {#if joining}
         <div class="w-full h-full flex items-center justify-center">
           <div class="text-center">
