@@ -60,6 +60,13 @@ const ICE_SERVERS: RTCIceServer[] = [
 
 // Stores
 export const participants = writable<Map<string, Participant>>(new Map())
+
+// Debug: Expose participants to window for e2e testing
+if (typeof window !== 'undefined') {
+  participants.subscribe(p => {
+    (window as any).__DEBUG_PARTICIPANTS = p
+  })
+}
 export const localMedia = writable<LocalMedia>({
   stream: null,
   screenStream: null,
@@ -122,6 +129,9 @@ let presenceInterval: ReturnType<typeof setInterval> | null = null
 
 // ICE candidate queue per peer (for candidates received before remote description)
 const iceCandidateQueues = new Map<string, RTCIceCandidateInit[]>()
+
+// Perfect negotiation state per peer
+const makingOffer = new Map<string, boolean>()
 
 // Track processed message timestamps to avoid duplicates
 const processedMessages = new Set<string>()
@@ -540,12 +550,13 @@ function setupDataChannel(dc: RTCDataChannel, remotePubkey: string): void {
   }
 }
 
-function createPeerConnection(remotePubkey: string, initiator: boolean): RTCPeerConnection {
+function createPeerConnection(remotePubkey: string, createDataChannel: boolean): RTCPeerConnection {
   const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
   const media = get(localMedia)
 
-  // Create data channel if we're the initiator
-  if (initiator) {
+  // Create data channel only if we're the deterministic initiator
+  // (higher pubkey = "impolite" = creates data channel)
+  if (createDataChannel) {
     const dc = pc.createDataChannel('chat')
     setupDataChannel(dc, remotePubkey)
   }
@@ -605,31 +616,24 @@ function createPeerConnection(remotePubkey: string, initiator: boolean): RTCPeer
     }
   }
 
-  // Handle renegotiation (when tracks are added after connection established)
+  // Handle negotiation (perfect negotiation pattern)
   pc.onnegotiationneeded = async () => {
     const currentIdentity = get(identity)
     if (!currentIdentity) return
 
-    // Use polite/impolite pattern - impolite peer initiates offers
-    const weArePolite = currentIdentity.pubkey < remotePubkey
-    if (weArePolite) {
-      // Polite peer waits for offer from impolite peer
-      // But we need to signal that we need renegotiation
-      // For now, both sides can create offers and glare handling will resolve
-    }
-
-    console.log(`Renegotiation needed with ${remotePubkey.slice(0, 8)}`)
     try {
-      const offer = await pc.createOffer()
-      await pc.setLocalDescription(offer)
-
+      makingOffer.set(remotePubkey, true)
+      await pc.setLocalDescription()  // Creates offer automatically
+      console.log(`Sending offer to ${remotePubkey.slice(0, 8)}`)
       await sendSignal({
         type: 'offer',
         to: remotePubkey,
         data: pc.localDescription?.toJSON(),
       })
     } catch (err) {
-      console.error('Error during renegotiation:', err)
+      console.error('Error during negotiation:', err)
+    } finally {
+      makingOffer.set(remotePubkey, false)
     }
   }
 
@@ -646,6 +650,7 @@ function removeParticipant(pubkey: string): void {
     return new Map(p)
   })
   iceCandidateQueues.delete(pubkey)
+  makingOffer.delete(pubkey)
 }
 
 async function processQueuedIceCandidates(pubkey: string, pc: RTCPeerConnection): Promise<void> {
@@ -738,40 +743,20 @@ async function handlePresence(payload: SignalPayload): Promise<void> {
     })
   }
 
-  // Use deterministic polite/impolite peer to avoid glare
-  // Lower pubkey is "polite" (waits), higher is "impolite" (initiates)
-  const weArePolite = currentIdentity.pubkey < payload.from
+  // Deterministic: higher pubkey is "impolite" and creates data channel
+  const weAreImpolite = currentIdentity.pubkey > payload.from
+  const pc = createPeerConnection(payload.from, weAreImpolite)
 
-  if (!weArePolite) {
-    // We initiate the connection (create offer) and data channel
-    const pc = createPeerConnection(payload.from, true)
-
-    participants.update(p => {
-      const participant = p.get(payload.from)
-      if (participant) {
-        participant.peerConnection = pc
-      }
-      return new Map(p)
-    })
-
-    try {
-      const offer = await pc.createOffer()
-      await pc.setLocalDescription(offer)
-
-      await sendSignal({
-        type: 'offer',
-        to: payload.from,
-        data: pc.localDescription?.toJSON(),
-      })
-    } catch (err) {
-      console.error('Error creating offer:', err)
+  participants.update(p => {
+    const participant = p.get(payload.from)
+    if (participant) {
+      participant.peerConnection = pc
     }
-  } else {
-    // We're polite - respond with presence so they know we exist and can send offer
-    await sendSignal({
-      type: 'presence',
-    })
-  }
+    return new Map(p)
+  })
+
+  // onnegotiationneeded will fire automatically and send the offer
+  // (triggered by addTrack or createDataChannel in createPeerConnection)
 }
 
 async function handleOffer(payload: SignalPayload): Promise<void> {
@@ -780,28 +765,30 @@ async function handleOffer(payload: SignalPayload): Promise<void> {
 
   console.log(`Received offer from ${payload.fromName}`)
 
+  // Deterministic: lower pubkey is "polite" (yields on collision)
+  const weArePolite = currentIdentity.pubkey < payload.from
+
   let pc: RTCPeerConnection
   const existingParticipant = get(participants).get(payload.from)
 
   if (existingParticipant?.peerConnection) {
     pc = existingParticipant.peerConnection
 
-    // Handle glare: if we have a local offer pending, check who should back off
-    if (pc.signalingState === 'have-local-offer') {
-      const weArePolite = currentIdentity.pubkey < payload.from
-      if (weArePolite) {
-        // We back off, accept their offer
-        console.log('Glare detected, we are polite - rolling back')
-        await pc.setLocalDescription({ type: 'rollback' })
-      } else {
-        // We ignore their offer, they should accept ours
-        console.log('Glare detected, we are impolite - ignoring their offer')
-        return
+    // Perfect negotiation: detect offer collision
+    const offerCollision = makingOffer.get(payload.from) || pc.signalingState !== 'stable'
+
+    if (offerCollision) {
+      if (!weArePolite) {
+        console.log('Offer collision - we are impolite, ignoring their offer')
+        return // Ignore their offer, they will answer ours
       }
+      console.log('Offer collision - we are polite, rolling back')
     }
   } else {
-    // We're receiving an offer, so we don't initiate data channel
-    pc = createPeerConnection(payload.from, false)
+    // No connection yet - create one
+    // Deterministic: higher pubkey is "impolite" and creates data channel
+    const weAreImpolite = !weArePolite
+    pc = createPeerConnection(payload.from, weAreImpolite)
 
     participants.update(p => {
       if (!p.has(payload.from)) {
@@ -823,6 +810,7 @@ async function handleOffer(payload: SignalPayload): Promise<void> {
   }
 
   try {
+    // setRemoteDescription with offer automatically handles rollback if needed
     await pc.setRemoteDescription(new RTCSessionDescription(payload.data))
 
     // Process any queued ICE candidates
@@ -913,6 +901,7 @@ export async function joinRoom(meetingPrivkeyHex: string): Promise<void> {
   // Clear any stale state
   processedMessages.clear()
   iceCandidateQueues.clear()
+  makingOffer.clear()
 
   // Subscribe to signals authored by the meeting's pubkey
   signalSubscription = ndkInstance.subscribe(
@@ -987,6 +976,7 @@ export async function leaveRoom(): Promise<void> {
   meetingSigner = null
   processedMessages.clear()
   iceCandidateQueues.clear()
+  makingOffer.clear()
   chatMessages.set([])
   unreadCount.set(0)
   focusedPubkey.set(null)

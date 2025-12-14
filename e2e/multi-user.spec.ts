@@ -207,10 +207,87 @@ test.describe('Multi-user Meeting', () => {
     await context1.close();
   });
 
+  test('simultaneous join - both users connect reliably', async ({ browser }) => {
+    // This tests the "both send offers" pattern for reliability
+    // Both users join at nearly the same time, triggering potential glare
+    const context1 = await browser.newContext({
+      permissions: ['camera', 'microphone'],
+    });
+    const context2 = await browser.newContext({
+      permissions: ['camera', 'microphone'],
+    });
+
+    const page1 = await context1.newPage();
+    const page2 = await context2.newPage();
+
+    setupPageErrorHandler(page1);
+    setupPageErrorHandler(page2);
+
+    // User 1: Create meeting
+    await page1.goto('/');
+    await page1.getByPlaceholder('Name').fill('Alice');
+    await page1.getByRole('button', { name: 'Join' }).click();
+    await expect(page1.getByRole('heading', { name: 'Start a Meeting' })).toBeVisible({ timeout: 15000 });
+    await page1.getByRole('button', { name: 'Start Meeting' }).click();
+    await expect(page1.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
+
+    const meetingUrl = page1.url();
+
+    // User 2: Join almost simultaneously
+    await page2.goto(meetingUrl);
+    await page2.getByPlaceholder('Name').fill('Bob');
+    await page2.getByRole('button', { name: 'Join Meeting' }).click();
+    await expect(page2.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
+
+    // Wait for WebRTC connection - verify both see 2 tiles
+    await expect(page1.getByTestId('video-tile')).toHaveCount(2, { timeout: 20000 });
+    await expect(page2.getByTestId('video-tile')).toHaveCount(2, { timeout: 20000 });
+
+    // Wait for data channels to be open (connectionState becomes 'connected')
+    await expect(async () => {
+      const state = await page1.evaluate(() => {
+        const participants = (window as any).__DEBUG_PARTICIPANTS;
+        if (!participants) return [];
+        return Array.from(participants.values()).map((p: any) => p.connectionState);
+      });
+      expect(state).toContain('connected');
+    }).toPass({ timeout: 15000 });
+
+    await expect(async () => {
+      const state = await page2.evaluate(() => {
+        const participants = (window as any).__DEBUG_PARTICIPANTS;
+        if (!participants) return [];
+        return Array.from(participants.values()).map((p: any) => p.connectionState);
+      });
+      expect(state).toContain('connected');
+    }).toPass({ timeout: 15000 });
+
+    // Verify the connection is actually established by checking connection state
+    // via the data channel (send a chat message)
+    await page1.getByTitle('Open chat').click();
+    await page1.getByPlaceholder('Type a message...').fill('Hello from Alice');
+    await page1.getByPlaceholder('Type a message...').press('Enter');
+
+    // Bob should receive the message via data channel
+    await page2.getByTitle('Open chat').click();
+    await expect(page2.getByText('Hello from Alice')).toBeVisible({ timeout: 15000 });
+
+    // Bob replies
+    await page2.getByPlaceholder('Type a message...').fill('Hi Alice!');
+    await page2.getByPlaceholder('Type a message...').press('Enter');
+
+    // Alice should receive it
+    await expect(page1.getByText('Hi Alice!')).toBeVisible({ timeout: 15000 });
+
+    // Clean up
+    await context1.close();
+    await context2.close();
+  });
+
   test('five users can join and see each other', async ({ browser }) => {
     const NUM_USERS = 5;
-    const contexts = [];
-    const pages = [];
+    const contexts: any[] = [];
+    const pages: Page[] = [];
 
     // Create browser contexts for all users
     for (let i = 0; i < NUM_USERS; i++) {
