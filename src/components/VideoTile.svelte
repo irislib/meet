@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte'
+  import { onDestroy, createEventDispatcher } from 'svelte'
   import Avatar from './Avatar.svelte'
   import Name from './Name.svelte'
 
@@ -12,7 +12,13 @@
   export let isLocal: boolean = false
   export let isScreenShare: boolean = false
 
+  const dispatch = createEventDispatcher<{ click: { pubkey: string } }>()
+
   let videoElement: HTMLVideoElement
+
+  function handleClick() {
+    dispatch('click', { pubkey })
+  }
 
   $: if (videoElement && stream) {
     videoElement.srcObject = stream
@@ -25,7 +31,14 @@
   })
 </script>
 
-<div class="relative bg-surface-light rounded-xl overflow-hidden w-full aspect-video" data-testid="video-tile">
+<div
+  class="relative bg-surface-light rounded-xl overflow-hidden w-full aspect-video cursor-pointer hover:ring-2 hover:ring-primary/50 transition-shadow"
+  data-testid="video-tile"
+  on:click={handleClick}
+  on:keydown={(e) => e.key === 'Enter' && handleClick()}
+  role="button"
+  tabindex="0"
+>
   {#if stream && videoEnabled}
     <video
       bind:this={videoElement}

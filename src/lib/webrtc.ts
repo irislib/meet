@@ -68,6 +68,7 @@ export const localMedia = writable<LocalMedia>({
 })
 export const chatMessages = writable<ChatMessage[]>([])
 export const unreadCount = writable<number>(0)
+export const focusedPubkey = writable<string | null>(null)
 
 // Kind for signaling events
 const SIGNAL_KIND = 25050
