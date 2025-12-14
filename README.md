@@ -2,7 +2,7 @@
 
 Simple, private video meetings. No account required.
 
-**Live at [meet.iris.to](https://meet.iris.to)**
+**Live at [meet.iris.to](https://meet.iris.to)** | [irislib.github.io/meet](https://irislib.github.io/meet/)
 
 ## Features
 
