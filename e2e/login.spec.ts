@@ -57,6 +57,25 @@ test.describe('Login Flow', () => {
     await expect(page.getByRole('heading', { name: 'Start a Meeting' })).toBeVisible({ timeout: 15000 });
   });
 
+  test('custom name persists across page reload', async ({ page }) => {
+    await page.goto('/');
+
+    // Login with custom name
+    await page.getByPlaceholder('Name').fill('Persistent User');
+    await page.getByRole('button', { name: 'Join' }).click();
+    await expect(page.getByRole('heading', { name: 'Start a Meeting' })).toBeVisible({ timeout: 15000 });
+
+    // Name should be visible in header
+    await expect(page.getByText('Persistent User')).toBeVisible();
+
+    // Reload the page
+    await page.reload();
+
+    // Name should still be visible after reload
+    await expect(page.getByRole('heading', { name: 'Start a Meeting' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Persistent User')).toBeVisible();
+  });
+
   test('can logout', async ({ page }) => {
     await page.goto('/');
 

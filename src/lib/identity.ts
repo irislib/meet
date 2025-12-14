@@ -1,6 +1,7 @@
 import NDK, { NDKPrivateKeySigner, NDKNip07Signer } from '@nostr-dev-kit/ndk'
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
 import { writable, derived, get } from 'svelte/store'
+import { saveLocalProfile, clearLocalProfile, getLocalProfile } from './profile'
 
 // Helper functions
 function bytesToHex(bytes: Uint8Array): string {
@@ -109,6 +110,11 @@ export async function loginWithPrivkey(privkeyHex: string, displayName: string |
     isNip07: false,
   })
 
+  // Save local profile rumor for display in UI and sending to peers
+  if (displayName) {
+    saveLocalProfile(user.pubkey, displayName)
+  }
+
   saveIdentity(privkeyHex)
 }
 
@@ -139,6 +145,12 @@ export async function autoLogin(displayName: string | null = null): Promise<bool
   // URL hash contains meeting nsec, not user identity
   const storedValue = loadStoredIdentity()
   if (storedValue) {
+    // Restore displayName from local profile if not provided
+    if (!displayName) {
+      const localProfile = getLocalProfile()
+      displayName = localProfile?.display_name || localProfile?.name || null
+    }
+
     if (storedValue === 'nip07') {
       // Try to re-authenticate with NIP-07 extension
       if (hasNip07()) {
@@ -169,6 +181,7 @@ export function logout(): void {
   ndkInstance.signer = undefined
   identity.set(null)
   clearStoredIdentity()
+  clearLocalProfile()
 }
 
 export function hasNip07(): boolean {

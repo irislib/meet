@@ -10,8 +10,69 @@ export interface Profile {
   nip05?: string
 }
 
+// Local profile rumor (unsigned kind 0 event content)
+const LOCAL_PROFILE_KEY = 'iris-meet-local-profile'
+
 // In-memory profile cache
 const profileCache = new Map<string, Profile>()
+
+// Load local profile from storage
+function loadLocalProfile(): Profile | null {
+  try {
+    const stored = localStorage.getItem(LOCAL_PROFILE_KEY)
+    if (stored) {
+      return JSON.parse(stored)
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+// Save local profile rumor
+export function saveLocalProfile(pubkey: string, name: string): Profile {
+  const profile: Profile = {
+    pubkey,
+    name,
+    display_name: name,
+  }
+  try {
+    localStorage.setItem(LOCAL_PROFILE_KEY, JSON.stringify(profile))
+  } catch {
+    // ignore
+  }
+  // Also add to cache
+  profileCache.set(pubkey, profile)
+  notifyListeners(pubkey, profile)
+  return profile
+}
+
+// Get the local profile rumor (for sending to peers)
+export function getLocalProfile(): Profile | null {
+  return loadLocalProfile()
+}
+
+// Add a received profile to the cache (from data channel)
+export function addProfileToCache(profile: Profile): void {
+  if (!profile.pubkey) return
+  profileCache.set(profile.pubkey, profile)
+  notifyListeners(profile.pubkey, profile)
+}
+
+// Clear local profile on logout
+export function clearLocalProfile(): void {
+  try {
+    localStorage.removeItem(LOCAL_PROFILE_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+// Initialize: load local profile into cache
+const localProfile = loadLocalProfile()
+if (localProfile) {
+  profileCache.set(localProfile.pubkey, localProfile)
+}
 
 // Track in-flight fetches
 const pendingFetches = new Set<string>()

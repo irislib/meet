@@ -4,6 +4,7 @@ import { NDKEvent, NDKSubscription, NDKPrivateKeySigner } from '@nostr-dev-kit/n
 import { identity, ndk } from './identity'
 import { getDisplayName } from './animalNames'
 import { createMeetingEncryption, type MeetingEncryption } from './encryption'
+import { getLocalProfile, addProfileToCache, type Profile } from './profile'
 
 export interface Participant {
   pubkey: string
@@ -27,11 +28,6 @@ export interface ChatMessage {
 interface DataChannelMessage {
   type: 'chat' | 'profile'
   data: any
-}
-
-interface ProfileData {
-  name: string
-  picture?: string
 }
 
 export interface LocalMedia {
@@ -442,15 +438,21 @@ function setupDataChannel(dc: RTCDataChannel, remotePubkey: string): void {
       const msg = JSON.parse(event.data) as DataChannelMessage
 
       if (msg.type === 'profile') {
-        // Update participant's display name from profile
-        const profile = msg.data as ProfileData
-        participants.update(p => {
-          const participant = p.get(remotePubkey)
-          if (participant && profile.name) {
-            participant.displayName = profile.name
-          }
-          return new Map(p)
-        })
+        // Add received profile to cache (updates Name/Avatar components)
+        const profile = msg.data as Profile
+        profile.pubkey = remotePubkey
+        addProfileToCache(profile)
+        // Also update participant's display name
+        const name = profile.display_name || profile.name
+        if (name) {
+          participants.update(p => {
+            const participant = p.get(remotePubkey)
+            if (participant) {
+              participant.displayName = name
+            }
+            return new Map(p)
+          })
+        }
       } else if (msg.type === 'chat') {
         const chatMsg = msg.data as ChatMessage
         chatMessages.update(msgs => [...msgs, chatMsg])
@@ -471,12 +473,12 @@ function setupDataChannel(dc: RTCDataChannel, remotePubkey: string): void {
       return new Map(p)
     })
 
-    // Send our profile if we're not using NIP-07 (anonymous user with custom name)
-    const currentIdentity = get(identity)
-    if (currentIdentity && !currentIdentity.isNip07 && currentIdentity.displayName) {
+    // Send our local profile rumor (for anonymous users)
+    const localProfile = getLocalProfile()
+    if (localProfile) {
       const profileMsg: DataChannelMessage = {
         type: 'profile',
-        data: { name: currentIdentity.displayName } as ProfileData,
+        data: localProfile,
       }
       dc.send(JSON.stringify(profileMsg))
     }
