@@ -25,7 +25,7 @@
   })
 </script>
 
-<div class="relative bg-surface-light rounded-xl overflow-hidden aspect-video" data-testid="video-tile">
+<div class="relative bg-surface-light rounded-xl overflow-hidden w-full aspect-video" data-testid="video-tile">
   {#if stream && videoEnabled}
     <video
       bind:this={videoElement}
