@@ -16,10 +16,8 @@
     return bytes
   }
 
-  function handleJoin() {
-    error = ''
-
-    let privkeyHex = meetingInput.trim()
+  function extractPrivkeyHex(input: string): string | null {
+    let privkeyHex = input.trim()
 
     // If it's a URL, extract the hash
     if (privkeyHex.includes('#')) {
@@ -27,11 +25,13 @@
     }
 
     // Validate hex format (64 chars for 32 bytes)
-    if (!/^[0-9a-fA-F]{64}$/.test(privkeyHex)) {
-      error = 'Please enter a valid meeting link'
-      return
+    if (/^[0-9a-fA-F]{64}$/.test(privkeyHex)) {
+      return privkeyHex
     }
+    return null
+  }
 
+  function joinWithPrivkey(privkeyHex: string) {
     try {
       const privkeyBytes = hexToBytes(privkeyHex)
       const pubkey = getPublicKey(privkeyBytes)
@@ -46,6 +46,24 @@
       dispatch('join', { meeting })
     } catch (e) {
       error = 'Invalid meeting link'
+    }
+  }
+
+  function handleJoin() {
+    error = ''
+    const privkeyHex = extractPrivkeyHex(meetingInput)
+    if (!privkeyHex) {
+      error = 'Please enter a valid meeting link'
+      return
+    }
+    joinWithPrivkey(privkeyHex)
+  }
+
+  // Auto-join when valid link is pasted
+  $: {
+    const privkeyHex = extractPrivkeyHex(meetingInput)
+    if (privkeyHex) {
+      joinWithPrivkey(privkeyHex)
     }
   }
 

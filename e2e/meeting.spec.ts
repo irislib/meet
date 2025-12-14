@@ -107,18 +107,14 @@ test.describe('Meeting Join', () => {
     await expect(joinButton).toBeDisabled();
   });
 
-  test('join button enables when link is entered', async ({ page }) => {
+  test('auto-joins when valid link is pasted', async ({ page }) => {
     const input = page.getByPlaceholder('Paste meeting link');
-    const joinButton = page.getByRole('button', { name: 'Join Meeting' });
 
-    // Initially disabled
-    await expect(joinButton).toBeDisabled();
-
-    // Enter a valid hex key (64 chars)
+    // Enter a valid hex key (64 chars) - should auto-join
     await input.fill('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
 
-    // Should be enabled now
-    await expect(joinButton).toBeEnabled();
+    // Should navigate to meeting room
+    await expect(page.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
   });
 
   test('shows error for invalid meeting link', async ({ page }) => {
