@@ -84,15 +84,16 @@ export const focusedPubkey = writable<string | null>(null)
 // Kind for signaling events
 const SIGNAL_KIND = 25050
 
-// Persist media preferences
+// Persist media preferences per meeting
 const MEDIA_PREFS_KEY = 'iris-meet-media-prefs'
 
 interface MediaPrefs {
+  meetingId: string
   audioEnabled: boolean
   videoEnabled: boolean
 }
 
-function loadMediaPrefs(): MediaPrefs {
+function loadMediaPrefs(): MediaPrefs | null {
   try {
     const stored = localStorage.getItem(MEDIA_PREFS_KEY)
     if (stored) {
@@ -101,20 +102,24 @@ function loadMediaPrefs(): MediaPrefs {
   } catch {
     // ignore
   }
-  return { audioEnabled: false, videoEnabled: false }
+  return null
 }
 
-function saveMediaPrefs(prefs: MediaPrefs): void {
+function saveMediaPrefs(meetingId: string, audioEnabled: boolean, videoEnabled: boolean): void {
   try {
+    const prefs: MediaPrefs = { meetingId, audioEnabled, videoEnabled }
     localStorage.setItem(MEDIA_PREFS_KEY, JSON.stringify(prefs))
   } catch {
     // ignore
   }
 }
 
-// Restore media based on saved preferences
-export async function restoreMediaPrefs(): Promise<void> {
+// Restore media based on saved preferences (only if same meeting)
+export async function restoreMediaPrefsForMeeting(meetingId: string): Promise<void> {
   const prefs = loadMediaPrefs()
+  if (!prefs || prefs.meetingId !== meetingId) {
+    return // Different meeting or no saved prefs - start with cam/mic off
+  }
   if (prefs.audioEnabled) {
     await toggleAudio()
   }
@@ -179,7 +184,7 @@ export async function toggleAudio(): Promise<boolean> {
       track.enabled = false
     })
     localMedia.update(m => ({ ...m, audioEnabled: false }))
-    saveMediaPrefs({ audioEnabled: false, videoEnabled: media.videoEnabled })
+    if (meetingEncryption) saveMediaPrefs(meetingEncryption.roomPubkey, false, media.videoEnabled)
     broadcastMediaState()
     return false
   }
@@ -191,7 +196,7 @@ export async function toggleAudio(): Promise<boolean> {
       track.enabled = true
     })
     localMedia.update(m => ({ ...m, audioEnabled: true }))
-    saveMediaPrefs({ audioEnabled: true, videoEnabled: media.videoEnabled })
+    if (meetingEncryption) saveMediaPrefs(meetingEncryption.roomPubkey, true, media.videoEnabled)
     broadcastMediaState()
     return true
   }
@@ -226,7 +231,7 @@ export async function toggleAudio(): Promise<boolean> {
       audioEnabled: true,
       audioDeviceId,
     }))
-    saveMediaPrefs({ audioEnabled: true, videoEnabled: media.videoEnabled })
+    if (meetingEncryption) saveMediaPrefs(meetingEncryption.roomPubkey, true, media.videoEnabled)
     broadcastMediaState()
     return true
   } catch (err) {
@@ -244,7 +249,7 @@ export async function toggleVideo(): Promise<boolean> {
       track.enabled = false
     })
     localMedia.update(m => ({ ...m, videoEnabled: false }))
-    saveMediaPrefs({ audioEnabled: media.audioEnabled, videoEnabled: false })
+    if (meetingEncryption) saveMediaPrefs(meetingEncryption.roomPubkey, media.audioEnabled, false)
     broadcastMediaState()
     return false
   }
@@ -256,7 +261,7 @@ export async function toggleVideo(): Promise<boolean> {
       track.enabled = true
     })
     localMedia.update(m => ({ ...m, videoEnabled: true }))
-    saveMediaPrefs({ audioEnabled: media.audioEnabled, videoEnabled: true })
+    if (meetingEncryption) saveMediaPrefs(meetingEncryption.roomPubkey, media.audioEnabled, true)
     broadcastMediaState()
     return true
   }
@@ -291,7 +296,7 @@ export async function toggleVideo(): Promise<boolean> {
       videoEnabled: true,
       videoDeviceId,
     }))
-    saveMediaPrefs({ audioEnabled: media.audioEnabled, videoEnabled: true })
+    if (meetingEncryption) saveMediaPrefs(meetingEncryption.roomPubkey, media.audioEnabled, true)
     broadcastMediaState()
     return true
   } catch (err) {

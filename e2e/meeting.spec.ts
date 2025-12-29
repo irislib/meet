@@ -85,6 +85,53 @@ test.describe('Meeting Creation', () => {
     // Should now show turn off option
     await expect(page.getByTitle('Turn off camera')).toBeVisible();
   });
+
+  test('restores mic/camera when rejoining same meeting', async ({ page }) => {
+    // Start a meeting
+    await page.getByRole('button', { name: 'Start Meeting' }).click();
+    await expect(page.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
+
+    // Get the meeting URL
+    const meetingUrl = page.url();
+    console.log('Meeting URL:', meetingUrl);
+
+    // Enable mic
+    await page.getByTitle('Unmute microphone').click();
+    await expect(page.getByTitle('Mute microphone')).toBeVisible();
+
+    // Leave meeting
+    await page.getByTitle('Leave meeting').click();
+    await expect(page.getByRole('heading', { name: 'Start a Meeting' })).toBeVisible({ timeout: 15000 });
+
+    // Rejoin the SAME meeting via direct URL (need reload to trigger onMount)
+    await page.goto(meetingUrl);
+    await page.reload();
+    await expect(page.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
+
+    // Mic should be restored (ON) - use regex to match exact start of title
+    await expect(page.getByTitle(/^Mute microphone/)).toBeVisible();
+  });
+
+  test('does not restore mic/camera for different meeting', async ({ page }) => {
+    // Start a meeting
+    await page.getByRole('button', { name: 'Start Meeting' }).click();
+    await expect(page.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
+
+    // Enable mic
+    await page.getByTitle('Unmute microphone').click();
+    await expect(page.getByTitle('Mute microphone')).toBeVisible();
+
+    // Leave meeting
+    await page.getByTitle('Leave meeting').click();
+    await expect(page.getByRole('heading', { name: 'Start a Meeting' })).toBeVisible({ timeout: 15000 });
+
+    // Start a DIFFERENT meeting
+    await page.getByRole('button', { name: 'Start Meeting' }).click();
+    await expect(page.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
+
+    // Mic should NOT be restored (OFF)
+    await expect(page.getByTitle('Unmute microphone')).toBeVisible();
+  });
 });
 
 test.describe('Meeting Join', () => {
@@ -115,6 +162,20 @@ test.describe('Meeting Join', () => {
 
     // Should navigate to meeting room
     await expect(page.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
+  });
+
+  test('joiner starts with camera and mic off', async ({ page }) => {
+    const input = page.getByPlaceholder('Paste meeting link');
+
+    // Join a meeting
+    await input.fill('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
+    await expect(page.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
+
+    // Verify mic starts OFF (shows "Unmute" button)
+    await expect(page.getByTitle('Unmute microphone')).toBeVisible();
+
+    // Verify camera starts OFF (shows "Turn on camera" button)
+    await expect(page.getByTitle('Turn on camera')).toBeVisible();
   });
 
   test('shows error for invalid meeting link', async ({ page }) => {
