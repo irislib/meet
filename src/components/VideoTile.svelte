@@ -2,7 +2,7 @@
   import { onDestroy, createEventDispatcher } from 'svelte'
   import Avatar from './Avatar.svelte'
   import Name from './Name.svelte'
-  import type { ConnectionState } from '../lib/webrtc'
+  import { localMedia, type ConnectionState } from '../lib/webrtc'
 
   export let stream: MediaStream | null = null
   export let pubkey: string = ''
@@ -24,6 +24,16 @@
 
   $: if (videoElement && stream) {
     videoElement.srcObject = stream
+  }
+
+  // Apply audio output device (setSinkId) to remote video elements
+  $: if (videoElement && !isLocal && $localMedia.audioOutputDeviceId) {
+    const el = videoElement as any
+    if (typeof el.setSinkId === 'function') {
+      el.setSinkId($localMedia.audioOutputDeviceId).catch((err: Error) => {
+        console.warn('Failed to set audio output device:', err)
+      })
+    }
   }
 
   onDestroy(() => {

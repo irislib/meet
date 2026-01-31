@@ -41,6 +41,7 @@ export interface LocalMedia {
   screenSharing: boolean
   audioDeviceId: string | null
   videoDeviceId: string | null
+  audioOutputDeviceId: string | null
 }
 
 // Inner message (encrypted in the Nostr event)
@@ -76,6 +77,7 @@ export const localMedia = writable<LocalMedia>({
   screenSharing: false,
   audioDeviceId: null,
   videoDeviceId: null,
+  audioOutputDeviceId: null,
 })
 export const chatMessages = writable<ChatMessage[]>([])
 export const unreadCount = writable<number>(0)
@@ -313,16 +315,22 @@ export function stopLocalStream(): void {
   if (media.screenStream) {
     media.screenStream.getTracks().forEach(track => track.stop())
   }
-  localMedia.set({ stream: null, screenStream: null, audioEnabled: false, videoEnabled: false, screenSharing: false, audioDeviceId: null, videoDeviceId: null })
+  localMedia.set({ stream: null, screenStream: null, audioEnabled: false, videoEnabled: false, screenSharing: false, audioDeviceId: null, videoDeviceId: null, audioOutputDeviceId: null })
 }
 
 // Get available media devices
-export async function getMediaDevices(): Promise<{ audioInputs: MediaDeviceInfo[], videoInputs: MediaDeviceInfo[] }> {
+export async function getMediaDevices(): Promise<{ audioInputs: MediaDeviceInfo[], videoInputs: MediaDeviceInfo[], audioOutputs: MediaDeviceInfo[] }> {
   const devices = await navigator.mediaDevices.enumerateDevices()
   return {
     audioInputs: devices.filter(d => d.kind === 'audioinput'),
     videoInputs: devices.filter(d => d.kind === 'videoinput'),
+    audioOutputs: devices.filter(d => d.kind === 'audiooutput'),
   }
+}
+
+// Switch audio output device (speaker/headphones)
+export async function switchAudioOutput(deviceId: string): Promise<void> {
+  localMedia.update(m => ({ ...m, audioOutputDeviceId: deviceId }))
 }
 
 // Switch camera

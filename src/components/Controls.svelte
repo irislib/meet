@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte'
-  import { localMedia, toggleAudio, toggleVideo, toggleScreenShare, getMediaDevices, switchCamera, switchMicrophone, unreadCount } from '../lib/webrtc'
+  import { localMedia, toggleAudio, toggleVideo, toggleScreenShare, getMediaDevices, switchCamera, switchMicrophone, switchAudioOutput, unreadCount } from '../lib/webrtc'
 
   const dispatch = createEventDispatcher()
 
@@ -9,6 +9,7 @@
 
   let audioDevices: MediaDeviceInfo[] = []
   let videoDevices: MediaDeviceInfo[] = []
+  let audioOutputDevices: MediaDeviceInfo[] = []
   let showAudioMenu = false
   let showVideoMenu = false
 
@@ -20,6 +21,7 @@
     const devices = await getMediaDevices()
     audioDevices = devices.audioInputs
     videoDevices = devices.videoInputs
+    audioOutputDevices = devices.audioOutputs
   }
 
   async function handleToggleAudio() {
@@ -55,6 +57,11 @@
     showAudioMenu = false
   }
 
+  async function selectAudioOutputDevice(deviceId: string) {
+    await switchAudioOutput(deviceId)
+    showAudioMenu = false
+  }
+
   async function selectVideoDevice(deviceId: string) {
     await switchCamera(deviceId)
     showVideoMenu = false
@@ -76,7 +83,7 @@
   <div class="flex items-center justify-center gap-3">
     <!-- Audio toggle with menu -->
     <div class="relative flex">
-      {#if audioDevices.length > 1}
+      {#if audioDevices.length > 1 || audioOutputDevices.length > 0}
         <button
           class="w-8 h-12 rounded-l-full flex items-center justify-center pl-2 pr-0 transition-colors border-r border-white/20"
           class:bg-surface-light={$localMedia.audioEnabled}
@@ -84,13 +91,13 @@
           class:bg-red-600={!$localMedia.audioEnabled}
           class:hover:bg-red-700={!$localMedia.audioEnabled}
           on:click={() => { showAudioMenu = !showAudioMenu; showVideoMenu = false }}
-          title="Select microphone"
+          title="Select audio devices"
         >
           <span class="i-carbon-chevron-up text-sm text-white"></span>
         </button>
       {/if}
       <button
-        class="w-12 h-12 rounded-full flex items-center justify-center transition-colors {audioDevices.length > 1 ? 'rounded-l-none' : ''}"
+        class="w-12 h-12 rounded-full flex items-center justify-center transition-colors {audioDevices.length > 1 || audioOutputDevices.length > 0 ? 'rounded-l-none' : ''}"
         class:bg-surface-light={$localMedia.audioEnabled}
         class:hover:bg-surface-lighter={$localMedia.audioEnabled}
         class:bg-red-600={!$localMedia.audioEnabled}
@@ -108,16 +115,33 @@
       <!-- Audio device menu -->
       {#if showAudioMenu}
         <div class="absolute bottom-full mb-2 left-0 bg-surface border border-surface-lighter rounded-lg shadow-xl py-1 min-w-56 max-w-72 z-50">
-          <div class="px-3 py-1 text-xs text-gray-400 uppercase">Microphone</div>
-          {#each audioDevices as device}
-            <button
-              class="w-full px-3 py-2 text-sm text-left text-white flex items-center gap-2 {device.deviceId === $localMedia.audioDeviceId ? 'bg-primary/20 hover:bg-primary/30' : 'hover:bg-surface-lighter'}"
-              on:click={() => selectAudioDevice(device.deviceId)}
-            >
-              <span class="i-carbon-microphone text-gray-400 flex-shrink-0"></span>
-              <span class="truncate">{device.label || `Microphone ${audioDevices.indexOf(device) + 1}`}</span>
-            </button>
-          {/each}
+          {#if audioDevices.length > 0}
+            <div class="px-3 py-1 text-xs text-gray-400 uppercase">Microphone</div>
+            {#each audioDevices as device}
+              <button
+                class="w-full px-3 py-2 text-sm text-left text-white flex items-center gap-2 {device.deviceId === $localMedia.audioDeviceId ? 'bg-primary/20 hover:bg-primary/30' : 'hover:bg-surface-lighter'}"
+                on:click={() => selectAudioDevice(device.deviceId)}
+              >
+                <span class="i-carbon-microphone text-gray-400 flex-shrink-0"></span>
+                <span class="truncate">{device.label || `Microphone ${audioDevices.indexOf(device) + 1}`}</span>
+              </button>
+            {/each}
+          {/if}
+          {#if audioOutputDevices.length > 0}
+            {#if audioDevices.length > 0}
+              <div class="border-t border-surface-lighter my-1"></div>
+            {/if}
+            <div class="px-3 py-1 text-xs text-gray-400 uppercase">Speaker</div>
+            {#each audioOutputDevices as device}
+              <button
+                class="w-full px-3 py-2 text-sm text-left text-white flex items-center gap-2 {device.deviceId === ($localMedia.audioOutputDeviceId || 'default') ? 'bg-primary/20 hover:bg-primary/30' : 'hover:bg-surface-lighter'}"
+                on:click={() => selectAudioOutputDevice(device.deviceId)}
+              >
+                <span class="i-carbon-volume-up text-gray-400 flex-shrink-0"></span>
+                <span class="truncate">{device.label || `Speaker ${audioOutputDevices.indexOf(device) + 1}`}</span>
+              </button>
+            {/each}
+          {/if}
         </div>
       {/if}
     </div>
