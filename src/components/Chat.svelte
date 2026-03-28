@@ -149,6 +149,8 @@
           class="px-3 py-2 bg-primary hover:bg-primary-dark rounded-lg text-white transition-colors"
           on:click={handleSend}
           disabled={!messageInput.trim()}
+          aria-label="Send message"
+          title="Send message"
         >
           <span class="i-carbon-send w-5 h-5"></span>
         </button>

@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store'
 import type NDK from '@nostr-dev-kit/ndk'
-import { NDKEvent, NDKSubscription, NDKPrivateKeySigner } from '@nostr-dev-kit/ndk'
+import { NDKEvent, NDKKind, NDKSubscription, NDKPrivateKeySigner } from '@nostr-dev-kit/ndk'
 import { identity, ndk } from './identity'
 import { getDisplayName } from './animalNames'
 import { createMeetingEncryption, encryptForPeer, decryptFromPeer, type MeetingEncryption } from './encryption'
@@ -84,7 +84,7 @@ export const unreadCount = writable<number>(0)
 export const focusedPubkey = writable<string | null>(null)
 
 // Kind for signaling events
-const SIGNAL_KIND = 25050
+const SIGNAL_KIND = 25050 as NDKKind
 
 // Persist media preferences per meeting
 const MEDIA_PREFS_KEY = 'iris-meet-media-prefs'
@@ -132,6 +132,7 @@ export async function restoreMediaPrefsForMeeting(meetingId: string): Promise<vo
 
 let meetingEncryption: MeetingEncryption | null = null
 let meetingSigner: NDKPrivateKeySigner | null = null
+let activeMeetingId: string | null = null
 let signalSubscription: NDKSubscription | null = null
 let presenceInterval: ReturnType<typeof setInterval> | null = null
 let joinedAt: number = 0 // Unix timestamp (seconds) when we joined
@@ -144,6 +145,12 @@ const makingOffer = new Map<string, boolean>()
 
 // Track processed message timestamps to avoid duplicates
 const processedMessages = new Set<string>()
+
+function persistMediaPrefs(audioEnabled: boolean, videoEnabled: boolean): void {
+  if (activeMeetingId) {
+    saveMediaPrefs(activeMeetingId, audioEnabled, videoEnabled)
+  }
+}
 
 export async function getLocalStream(video = true, audio = true): Promise<MediaStream> {
   const stream = await navigator.mediaDevices.getUserMedia({
@@ -172,6 +179,7 @@ export async function getLocalStream(video = true, audio = true): Promise<MediaS
     screenSharing: false,
     audioDeviceId,
     videoDeviceId,
+    audioOutputDeviceId: null,
   })
 
   return stream
@@ -186,7 +194,7 @@ export async function toggleAudio(): Promise<boolean> {
       track.enabled = false
     })
     localMedia.update(m => ({ ...m, audioEnabled: false }))
-    if (meetingEncryption) saveMediaPrefs(meetingEncryption.roomPubkey, false, media.videoEnabled)
+    persistMediaPrefs(false, media.videoEnabled)
     broadcastMediaState()
     return false
   }
@@ -198,7 +206,7 @@ export async function toggleAudio(): Promise<boolean> {
       track.enabled = true
     })
     localMedia.update(m => ({ ...m, audioEnabled: true }))
-    if (meetingEncryption) saveMediaPrefs(meetingEncryption.roomPubkey, true, media.videoEnabled)
+    persistMediaPrefs(true, media.videoEnabled)
     broadcastMediaState()
     return true
   }
@@ -233,7 +241,7 @@ export async function toggleAudio(): Promise<boolean> {
       audioEnabled: true,
       audioDeviceId,
     }))
-    if (meetingEncryption) saveMediaPrefs(meetingEncryption.roomPubkey, true, media.videoEnabled)
+    persistMediaPrefs(true, media.videoEnabled)
     broadcastMediaState()
     return true
   } catch (err) {
@@ -251,7 +259,7 @@ export async function toggleVideo(): Promise<boolean> {
       track.enabled = false
     })
     localMedia.update(m => ({ ...m, videoEnabled: false }))
-    if (meetingEncryption) saveMediaPrefs(meetingEncryption.roomPubkey, media.audioEnabled, false)
+    persistMediaPrefs(media.audioEnabled, false)
     broadcastMediaState()
     return false
   }
@@ -263,7 +271,7 @@ export async function toggleVideo(): Promise<boolean> {
       track.enabled = true
     })
     localMedia.update(m => ({ ...m, videoEnabled: true }))
-    if (meetingEncryption) saveMediaPrefs(meetingEncryption.roomPubkey, media.audioEnabled, true)
+    persistMediaPrefs(media.audioEnabled, true)
     broadcastMediaState()
     return true
   }
@@ -298,7 +306,7 @@ export async function toggleVideo(): Promise<boolean> {
       videoEnabled: true,
       videoDeviceId,
     }))
-    if (meetingEncryption) saveMediaPrefs(meetingEncryption.roomPubkey, media.audioEnabled, true)
+    persistMediaPrefs(media.audioEnabled, true)
     broadcastMediaState()
     return true
   } catch (err) {
@@ -965,6 +973,7 @@ export async function joinRoom(meetingPrivkeyHex: string): Promise<void> {
 
   meetingEncryption = createMeetingEncryption(meetingPrivkeyHex)
   meetingSigner = new NDKPrivateKeySigner(meetingPrivkeyHex)
+  activeMeetingId = meetingEncryption.roomPubkey
 
   // Clear any stale state
   processedMessages.clear()
@@ -1050,6 +1059,7 @@ export async function leaveRoom(): Promise<void> {
   // Clear state
   meetingEncryption = null
   meetingSigner = null
+  activeMeetingId = null
   processedMessages.clear()
   iceCandidateQueues.clear()
   makingOffer.clear()

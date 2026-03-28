@@ -1,11 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// Use all CPU cores by default
-const workers = process.env.PW_WORKERS ? parseInt(process.env.PW_WORKERS) : '100%';
+// The suite shares a single dev server, relay traffic, and fake media devices.
+// Running tests concurrently makes signaling and data-channel timing flaky.
+const workers = process.env.PW_WORKERS ? parseInt(process.env.PW_WORKERS, 10) : 1;
 
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers,

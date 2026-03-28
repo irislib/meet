@@ -2,7 +2,7 @@
 
 Simple, private video meetings. No account required.
 
-**Live at [meet.iris.to](https://meet.iris.to)** | [irislib.github.io/meet](https://irislib.github.io/meet/)
+**Live at [meet.iris.to](https://meet.iris.to)**
 
 ## Features
 
@@ -39,7 +39,9 @@ The meeting secret never leaves the browser. Relay operators see encrypted event
 pnpm install      # Install dependencies
 pnpm run dev      # Dev server at localhost:5173
 pnpm run build    # Production build
+pnpm run test     # Unit tests
 pnpm run test:e2e # Run Playwright tests
+pnpm run release:iris # Build, smoke-test, publish to hashtree, deploy to Cloudflare
 ```
 
 ## Tech stack

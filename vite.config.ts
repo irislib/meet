@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import UnoCSS from 'unocss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -42,7 +42,19 @@ export default defineConfig({
       },
     }),
   ],
-  base: process.env.GITHUB_PAGES ? '/meet/' : '/',
+  base: './',
+  test: {
+    include: ['src/**/*.test.ts'],
+    environment: 'node',
+  },
+  build: {
+    rollupOptions: {
+      onwarn(warning, warn) {
+        if (warning.code === 'EVAL' && warning.id?.includes('tseep')) return
+        warn(warning)
+      },
+    },
+  },
   server: {
     allowedHosts: true,
   },

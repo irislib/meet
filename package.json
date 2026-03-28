@@ -9,8 +9,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
-    "test": "echo \"No unit tests yet\"",
-    "test:e2e": "playwright test"
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "smoke:portable": "node ./scripts/smoke-meet-iris-portable.mjs",
+    "publish:iris": "node ./scripts/publish-iris-build.mjs",
+    "release:iris": "node ./scripts/release-site.mjs"
   },
   "devDependencies": {
     "@iconify-json/carbon": "^1.2.15",
@@ -26,7 +29,8 @@
     "typescript": "~5.9.3",
     "unocss": "^66.5.10",
     "vite": "^7.2.4",
-    "vite-plugin-pwa": "^1.2.0"
+    "vite-plugin-pwa": "^1.2.0",
+    "vitest": "^3.2.4"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",

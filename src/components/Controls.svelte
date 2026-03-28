@@ -3,7 +3,9 @@
   import { localMedia, toggleAudio, toggleVideo, toggleScreenShare, getMediaDevices, switchCamera, switchMicrophone, switchAudioOutput, unreadCount } from '../lib/webrtc'
 
   const dispatch = createEventDispatcher()
+  const MEDIA_PREFS_KEY = 'iris-meet-media-prefs'
 
+  export let meetingId: string | null = null
   export let showCopyLink: boolean = false
   export let copied: boolean = false
 
@@ -13,8 +15,15 @@
   let showAudioMenu = false
   let showVideoMenu = false
 
+  interface MediaPrefs {
+    meetingId: string
+    audioEnabled: boolean
+    videoEnabled: boolean
+  }
+
   onMount(async () => {
     await loadDevices()
+    await restoreMediaPrefs()
   })
 
   async function loadDevices() {
@@ -25,15 +34,17 @@
   }
 
   async function handleToggleAudio() {
-    await toggleAudio()
+    const audioEnabled = await toggleAudio()
     // Reload devices after first permission grant
     await loadDevices()
+    saveMediaPrefs(audioEnabled, $localMedia.videoEnabled)
   }
 
   async function handleToggleVideo() {
-    await toggleVideo()
+    const videoEnabled = await toggleVideo()
     // Reload devices after first permission grant
     await loadDevices()
+    saveMediaPrefs($localMedia.audioEnabled, videoEnabled)
   }
 
   async function handleToggleScreenShare() {
@@ -70,6 +81,49 @@
   function closeMenus() {
     showAudioMenu = false
     showVideoMenu = false
+  }
+
+  function loadMediaPrefs(): MediaPrefs | null {
+    if (!meetingId) {
+      return null
+    }
+
+    try {
+      const stored = localStorage.getItem(MEDIA_PREFS_KEY)
+      if (!stored) return null
+
+      const prefs = JSON.parse(stored) as MediaPrefs
+      return prefs.meetingId === meetingId ? prefs : null
+    } catch {
+      return null
+    }
+  }
+
+  function saveMediaPrefs(audioEnabled: boolean, videoEnabled: boolean) {
+    if (!meetingId) {
+      return
+    }
+
+    try {
+      const prefs: MediaPrefs = { meetingId, audioEnabled, videoEnabled }
+      localStorage.setItem(MEDIA_PREFS_KEY, JSON.stringify(prefs))
+    } catch {
+      // ignore
+    }
+  }
+
+  async function restoreMediaPrefs() {
+    const prefs = loadMediaPrefs()
+    if (!prefs) {
+      return
+    }
+
+    if (prefs.audioEnabled) {
+      await handleToggleAudio()
+    }
+    if (prefs.videoEnabled) {
+      await handleToggleVideo()
+    }
   }
 </script>
 
