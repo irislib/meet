@@ -10,7 +10,7 @@ export default defineConfig({
     svelte(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'iris-logo.png'],
+      includeAssets: ['iris-meet-icon.svg', 'iris-meet-icon-180.png', 'iris-meet-icon.png'],
       manifest: {
         name: 'Iris Meet',
         short_name: 'Iris Meet',
@@ -20,17 +20,17 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: 'iris-meet-icon-192.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'iris-meet-icon-512.png',
             sizes: '512x512',
             type: 'image/png',
           },
           {
-            src: 'maskable-icon.png',
+            src: 'iris-meet-icon-maskable.png',
             sizes: '640x640',
             type: 'image/png',
             purpose: 'maskable',
