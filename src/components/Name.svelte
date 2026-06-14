@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SharedName from '@iris/svelte-ui/Name.svelte'
   import { createProfileStore, getProfileName, type Profile } from '../lib/profile'
   import { getAnimalName } from '../lib/animalNames'
 
@@ -12,8 +13,11 @@
   $: animalName = getAnimalName(pubkey)
 </script>
 
-{#if profileName}
-  <span class="truncate">{profileName}</span>
-{:else}
-  <span class="truncate italic opacity-70">{animalName}</span>
-{/if}
+<SharedName
+  {pubkey}
+  {profile}
+  name={profileName}
+  fallbackName={animalName}
+  class="truncate"
+  fallbackClass="italic opacity-70"
+/>

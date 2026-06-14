@@ -33,6 +33,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@iris/svelte-ui": "file:../iris-kit/packages/svelte-ui",
     "@noble/hashes": "^2.0.1",
     "@noble/secp256k1": "^3.0.0",
     "@nostr-dev-kit/ndk": "^2.18.1",

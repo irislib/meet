@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@iris/svelte-ui':
+        specifier: file:../iris-kit/packages/svelte-ui
+        version: file:../iris-kit/packages/svelte-ui(svelte@5.46.0)
       '@noble/hashes':
         specifier: ^2.0.1
         version: 2.0.1
@@ -755,6 +758,11 @@ packages:
 
   '@iconify/utils@3.1.0':
     resolution: {integrity: sha512-Zlzem1ZXhI1iHeeERabLNzBHdOa4VhQbqAcOQaMKuTuyZCpwKbC2R4Dd0Zo3g9EAc+Y4fiarO8HIHRAth7+skw==}
+
+  '@iris/svelte-ui@file:../iris-kit/packages/svelte-ui':
+    resolution: {directory: ../iris-kit/packages/svelte-ui, type: directory}
+    peerDependencies:
+      svelte: ^5.0.0
 
   '@isaacs/balanced-match@4.0.1':
     resolution: {integrity: sha512-yzMTt9lEb8Gv7zRioUilSglI0c0smZ9k5D65677DLWLtWJaXIS3CqcGyUFByYKlnUj6TkjLVs54fBl6+TiGQDQ==}
@@ -3498,6 +3506,11 @@ snapshots:
       '@antfu/install-pkg': 1.1.0
       '@iconify/types': 2.0.0
       mlly: 1.8.0
+
+  '@iris/svelte-ui@file:../iris-kit/packages/svelte-ui(svelte@5.46.0)':
+    dependencies:
+      minidenticons: 4.2.1
+      svelte: 5.46.0
 
   '@isaacs/balanced-match@4.0.1': {}
 
