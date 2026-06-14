@@ -17,6 +17,7 @@ const profile = {
   treeName: 'meet',
   defaultWorkerName: 'iris-meet',
   defaultDomains: ['meet.iris.to'],
+  workerScript: 'scripts/https-static-assets-worker.mjs',
 }
 
 function wranglerPagesCommand(...args) {
@@ -25,6 +26,35 @@ function wranglerPagesCommand(...args) {
 
 function wranglerWorkerAssetsCommand(...args) {
   return ['npx', 'wrangler@4', 'deploy', ...args]
+}
+
+function workerAssetsDeployCommand(options) {
+  if (profile.workerScript) {
+    return [
+      'node',
+      './scripts/deploy-worker-assets.mjs',
+      '--script',
+      profile.workerScript,
+      '--assets',
+      profile.distDir,
+      '--name',
+      options.workerName,
+      '--compatibility-date',
+      options.workerCompatibilityDate,
+      '--wrangler-version',
+      '4',
+    ]
+  }
+
+  return wranglerWorkerAssetsCommand(
+    '--assets',
+    profile.distDir,
+    '--name',
+    options.workerName,
+    '--compatibility-date',
+    options.workerCompatibilityDate,
+    '--keep-vars',
+  )
 }
 
 export function parseArgs(argv, env = process.env) {
@@ -154,15 +184,7 @@ export function createReleasePlan(options) {
 
   if (!options.skipCloudflare) {
     const deployCommand = options.workerName
-      ? wranglerWorkerAssetsCommand(
-          '--assets',
-          profile.distDir,
-          '--name',
-          options.workerName,
-          '--compatibility-date',
-          options.workerCompatibilityDate,
-          '--keep-vars',
-        )
+      ? workerAssetsDeployCommand(options)
       : wranglerPagesCommand(
           'pages',
           'deploy',
