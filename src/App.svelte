@@ -65,6 +65,11 @@
     view = 'home'
   }
 
+  function handleHomeClick() {
+    leaveMeeting()
+    view = 'home'
+  }
+
   function handleLogout() {
     logout()
     leaveMeeting()
@@ -94,12 +99,17 @@
     <div class="min-h-screen flex flex-col">
       <!-- Header -->
       <header class="h-16 px-4 flex items-center justify-between border-b border-surface-lighter">
-        <div class="flex items-center gap-2 select-none">
+        <button
+          class="flex items-center gap-2 select-none bg-transparent border-none p-0 cursor-pointer hover:opacity-80 transition-opacity"
+          type="button"
+          on:click={handleHomeClick}
+          aria-label="Go to home"
+        >
           <img src={meetIconUrl} alt="Iris Meet" class="w-8 h-8" draggable="false" />
           <h1 class="text-xl font-semibold">
             iris <span class="text-[#916dfe]">meet</span>
           </h1>
-        </div>
+        </button>
         <div class="relative">
           <button
             class="flex items-center gap-2 cursor-pointer bg-transparent border-none p-0"
