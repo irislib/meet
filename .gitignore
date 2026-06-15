@@ -9,6 +9,7 @@ lerna-debug.log*
 
 node_modules
 dist
+build
 dist-ssr
 *.local
 
@@ -24,6 +25,32 @@ dist-ssr
 *.sw?
 
 # Playwright
+coverage/
 test-results/
 playwright-report/
 playwright/.cache/
+
+# Local env and signing material
+.env
+.env.*
+!.env.example
+!.env.*.example
+.secrets/
+secrets/
+secrets.json
+credentials.json
+*credentials*.json
+*token*.json
+*token*.txt
+.npmrc
+.local/
+.wrangler/
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+*.pem
+*.key
+*.p12
+*.mobileprovision
+*.provisionprofile
