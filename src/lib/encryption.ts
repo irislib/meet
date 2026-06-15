@@ -1,7 +1,7 @@
 import { nip44, getPublicKey } from 'nostr-tools'
 import { get } from 'svelte/store'
 import { identity } from './identity'
-import type { NDKPrivateKeySigner } from '@nostr-dev-kit/ndk'
+import type { NDKPrivateKeySigner } from 'ndk'
 
 // Helper function
 function hexToBytes(hex: string): Uint8Array {

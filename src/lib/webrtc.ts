@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store'
-import type NDK from '@nostr-dev-kit/ndk'
-import { NDKEvent, NDKKind, NDKSubscription, NDKPrivateKeySigner } from '@nostr-dev-kit/ndk'
+import type NDK from 'ndk'
+import { NDKEvent, NDKKind, NDKSubscription, NDKPrivateKeySigner } from 'ndk'
 import { identity, ndk } from './identity'
 import { getDisplayName } from './animalNames'
 import { createMeetingEncryption, encryptForPeer, decryptFromPeer, type MeetingEncryption } from './encryption'

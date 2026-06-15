@@ -1,4 +1,4 @@
-import NDK, { NDKPrivateKeySigner, NDKNip07Signer } from '@nostr-dev-kit/ndk'
+import NDK, { NDKPrivateKeySigner, NDKNip07Signer } from 'ndk'
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
 import { writable, derived, get } from 'svelte/store'
 import { saveLocalProfile, clearLocalProfile, getLocalProfile } from './profile'
