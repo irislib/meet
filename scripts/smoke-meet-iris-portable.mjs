@@ -11,7 +11,7 @@ const screenshotPath = path.join(appDir, 'test-results', 'meet-iris-portable-smo
 async function main() {
   await runPortableSmoke({
     distDir,
-    title: 'iris meet',
+    title: 'Iris Meet',
     screenshotPath,
     async validatePage(page) {
       await page.locator("img[src$='iris-meet-icon.svg']").first().waitFor({ state: 'visible', timeout: 15000 })

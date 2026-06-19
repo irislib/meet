@@ -9,8 +9,8 @@ test.describe('Login Flow', () => {
   test('shows login page on first visit', async ({ page }) => {
     await page.goto('/');
 
-    // Should show the iris meet branding
-    await expect(page.getByRole('heading', { name: 'iris meet' })).toBeVisible();
+    // Should show the Meet branding
+    await expect(page.getByRole('heading', { name: 'Meet' })).toBeVisible();
 
     // Should have name input
     await expect(page.getByPlaceholder('Name')).toBeVisible();
@@ -90,6 +90,6 @@ test.describe('Login Flow', () => {
     await page.getByRole('button', { name: 'Logout' }).click();
 
     // Should be back at login screen
-    await expect(page.getByRole('heading', { name: 'iris meet' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Meet' })).toBeVisible();
   });
 });

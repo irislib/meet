@@ -89,9 +89,7 @@
     <div class="min-h-screen flex flex-col items-center justify-center p-4">
       <div class="mb-8 text-center flex flex-col items-center select-none">
         <img src={meetIconUrl} alt="Iris Meet" class="w-16 h-16 mb-4" draggable="false" />
-        <h1 class="text-4xl font-semibold">
-          iris <span class="text-[#916dfe]">meet</span>
-        </h1>
+        <h1 class="text-4xl font-semibold">Meet</h1>
       </div>
       <LoginForm on:login={handleLogin} />
     </div>
@@ -106,9 +104,7 @@
           aria-label="Go to home"
         >
           <img src={meetIconUrl} alt="Iris Meet" class="w-8 h-8" draggable="false" />
-          <h1 class="text-xl font-semibold">
-            iris <span class="text-[#916dfe]">meet</span>
-          </h1>
+          <h1 class="text-xl font-semibold">Meet</h1>
         </button>
         <div class="relative">
           <button

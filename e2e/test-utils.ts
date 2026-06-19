@@ -58,7 +58,7 @@ export async function createMeeting(page: Page): Promise<string> {
   await page.getByRole('button', { name: 'Join Now' }).click();
 
   // Wait for meeting room to load
-  await expect(page.getByText('Iris Meet')).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
 
   // Get the URL with the nsec
   const url = page.url();
@@ -80,7 +80,7 @@ export async function joinMeetingByLink(page: Page, meetingLink: string) {
   await page.getByRole('button', { name: 'Join Meeting' }).click();
 
   // Wait for meeting room to load
-  await expect(page.locator('.text-lg.font-semibold:has-text("Iris Meet")')).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
 }
 
 /**
