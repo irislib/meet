@@ -2,14 +2,41 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { resolveHtreeCommand } from './hashtreePaths.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const appDir = path.resolve(__dirname, '..')
-const workspaceDir = path.resolve(appDir, '..')
-const manifestPath = path.join(workspaceDir, 'hashtree', 'rust', 'Cargo.toml')
 const distDir = path.join(appDir, 'dist')
 const defaultWorkerCompatibilityDate = '2026-03-26'
+
+/**
+ * @typedef {{
+ *   dryRun: boolean
+ *   skipCloudflare: boolean
+ *   pagesOnly: boolean
+ *   treeName: string
+ *   branch: string | undefined
+ *   pagesProject: string | undefined
+ *   workerName: string | undefined
+ *   routes: string[]
+ *   domains: string[]
+ *   workerCompatibilityDate: string
+ * }} ReleaseOptions
+ * @typedef {{ id: string, label: string, command: string[], cwd: string }} ReleaseStep
+ * @typedef {{ status: number, stdout: string, stderr: string }} StepResult
+ * @typedef {{
+ *   dryRun?: false
+ *   publish: { nhash: string, publishedRef: string }
+ *   pagesUrl: string | null
+ *   pagesProject: string | null
+ *   workerName: string | null
+ *   routes: string[]
+ *   domains: string[]
+ *   treeName: string
+ * }} ReleaseResult
+ * @typedef {{ dryRun: true, steps: ReleaseStep[] }} DryRunResult
+ */
 
 const profile = {
   appName: 'Iris Meet',
@@ -20,15 +47,20 @@ const profile = {
   workerScript: 'scripts/https-static-assets-worker.mjs',
 }
 
+/** @param {...string} args @returns {string[]} */
 function wranglerPagesCommand(...args) {
   return ['npx', 'wrangler@4', ...args]
 }
 
+/** @param {...string} args @returns {string[]} */
 function wranglerWorkerAssetsCommand(...args) {
   return ['npx', 'wrangler@4', 'deploy', ...args]
 }
 
+/** @param {ReleaseOptions} options @returns {string[]} */
 function workerAssetsDeployCommand(options) {
+  const workerName = options.workerName
+  if (!workerName) throw new Error('Worker deployment requires a service name')
   if (profile.workerScript) {
     return [
       'node',
@@ -38,7 +70,7 @@ function workerAssetsDeployCommand(options) {
       '--assets',
       profile.distDir,
       '--name',
-      options.workerName,
+      workerName,
       '--compatibility-date',
       options.workerCompatibilityDate,
       '--wrangler-version',
@@ -50,13 +82,25 @@ function workerAssetsDeployCommand(options) {
     '--assets',
     profile.distDir,
     '--name',
-    options.workerName,
+    workerName,
     '--compatibility-date',
     options.workerCompatibilityDate,
     '--keep-vars',
   )
 }
 
+/** @param {string[]} args @param {string} flag @returns {string} */
+function takeArgValue(args, flag) {
+  const value = args.shift()
+  if (!value) throw new Error(`Missing value for ${flag}`)
+  return value
+}
+
+/**
+ * @param {string[]} argv
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {ReleaseOptions}
+ */
 export function parseArgs(argv, env = process.env) {
   const args = [...argv].filter((arg, index) => !(arg === '--' && index === 0))
 
@@ -77,31 +121,31 @@ export function parseArgs(argv, env = process.env) {
       continue
     }
     if (arg === '--pages-project') {
-      pagesProject = args.shift()
+      pagesProject = takeArgValue(args, arg)
       continue
     }
     if (arg === '--worker-name') {
-      workerName = args.shift()
+      workerName = takeArgValue(args, arg)
       continue
     }
     if (arg === '--tree') {
-      treeName = args.shift()
+      treeName = takeArgValue(args, arg)
       continue
     }
     if (arg === '--route') {
-      routes.push(args.shift())
+      routes.push(takeArgValue(args, arg))
       continue
     }
     if (arg === '--domain') {
-      domains.push(args.shift())
+      domains.push(takeArgValue(args, arg))
       continue
     }
     if (arg === '--branch') {
-      branch = args.shift()
+      branch = takeArgValue(args, arg)
       continue
     }
     if (arg === '--compatibility-date') {
-      workerCompatibilityDate = args.shift()
+      workerCompatibilityDate = takeArgValue(args, arg)
       continue
     }
     if (arg === '--dry-run') {
@@ -133,6 +177,7 @@ export function parseArgs(argv, env = process.env) {
   }
 }
 
+/** @param {ReleaseOptions} options @returns {{ steps: ReleaseStep[] }} */
 export function createReleasePlan(options) {
   if (!options.skipCloudflare && !options.workerName && !options.pagesProject) {
     throw new Error('Missing Cloudflare target. Pass --worker-name, --pages-project, or set CF_WORKER_NAME / CF_PAGES_PROJECT.')
@@ -142,6 +187,12 @@ export function createReleasePlan(options) {
   }
 
   const steps = [
+    {
+      id: 'install',
+      label: `Install ${profile.appName} from frozen lockfile`,
+      command: ['pnpm', 'install', '--frozen-lockfile'],
+      cwd: appDir,
+    },
     {
       id: 'build',
       label: `Build ${profile.appName}`,
@@ -163,35 +214,25 @@ export function createReleasePlan(options) {
     {
       id: 'publish',
       label: `Publish ${profile.appName} to hashtree`,
-      command: [
-        'cargo',
-        'run',
-        '--manifest-path',
-        manifestPath,
-        '-p',
-        'hashtree-cli',
-        '--bin',
-        'htree',
-        '--',
-        'add',
-        '.',
-        '--publish',
-        options.treeName,
-      ],
+      command: resolveHtreeCommand('add', '.', '--publish', options.treeName),
       cwd: distDir,
     },
   ]
 
   if (!options.skipCloudflare) {
-    const deployCommand = options.workerName
-      ? workerAssetsDeployCommand(options)
-      : wranglerPagesCommand(
+    let deployCommand
+    if (options.workerName) {
+      deployCommand = workerAssetsDeployCommand(options)
+    } else {
+      if (!options.pagesProject) throw new Error('Pages deployments require a project name')
+      deployCommand = wranglerPagesCommand(
           'pages',
           'deploy',
           profile.distDir,
           '--project-name',
           options.pagesProject,
         )
+    }
 
     if (options.workerName) {
       for (const route of options.routes) {
@@ -218,6 +259,7 @@ export function createReleasePlan(options) {
   return { steps }
 }
 
+/** @param {ReleaseStep} step @returns {StepResult} */
 function defaultRunner(step) {
   const [command, ...args] = step.command
   console.log(`\n==> ${step.label}`)
@@ -248,6 +290,7 @@ function ensureDistExists() {
   }
 }
 
+/** @param {string} output @returns {{ nhash: string, publishedRef: string }} */
 export function parsePublishOutput(output) {
   const nhashMatch = output.match(/nhash1[ac-hj-np-z02-9]+/i)
   if (!nhashMatch) {
@@ -265,11 +308,17 @@ export function parsePublishOutput(output) {
   }
 }
 
+/** @param {string} output @returns {string | null} */
 function parsePagesOutput(output) {
   const pagesUrlMatch = output.match(/https:\/\/[^\s]+\.pages\.dev(?:\/[^\s]*)?/i)
   return pagesUrlMatch ? pagesUrlMatch[0] : null
 }
 
+/**
+ * @param {ReleaseOptions} options
+ * @param {(step: ReleaseStep) => StepResult} [runner]
+ * @returns {ReleaseResult | DryRunResult}
+ */
 export function runRelease(options, runner = defaultRunner) {
   const plan = createReleasePlan(options)
 
@@ -327,6 +376,7 @@ Options:
 `
 }
 
+/** @param {ReleaseResult} result */
 function printSummary(result) {
   console.log(`\n${profile.appName} release complete.`)
   console.log(`Hashtree immutable URL: htree://${result.publish.nhash}/index.html`)

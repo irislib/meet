@@ -17,6 +17,16 @@ describe('portable build config', () => {
     expect(config.base ?? '/').toBe('./')
   })
 
+  it('separates application code from the dependency runtime', async () => {
+    const config = await loadViteConfig()
+    const output = config.build?.rollupOptions?.output
+    const manualChunks = !Array.isArray(output) ? output?.manualChunks : undefined
+    const chunker = typeof manualChunks === 'function' ? manualChunks : undefined
+
+    expect(chunker).toBeTypeOf('function')
+    expect(chunker?.('/repo/node_modules/ndk/dist/index.js', {} as never)).toBe('vendor')
+  })
+
   it('keeps the HTML entrypoint free of root-absolute asset refs', () => {
     const indexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf8')
 

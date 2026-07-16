@@ -3,6 +3,10 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 import UnoCSS from 'unocss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+export function runtimeChunk(id: string): string | undefined {
+  return id.includes('/node_modules/') ? 'vendor' : undefined
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -48,11 +52,13 @@ export default defineConfig({
     environment: 'node',
   },
   build: {
+    chunkSizeWarningLimit: 550,
     rollupOptions: {
       onwarn(warning, warn) {
         if (warning.code === 'EVAL' && warning.id?.includes('tseep')) return
         warn(warning)
       },
+      output: { manualChunks: runtimeChunk },
     },
   },
   server: {
