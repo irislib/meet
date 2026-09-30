@@ -9,6 +9,7 @@ export function runtimeChunk(id: string): string | undefined {
 
 // https://vite.dev/config/
 export default defineConfig({
+  resolve: { dedupe: ['nostr-pubsub', 'nostr-tools'] },
   plugins: [
     UnoCSS(),
     svelte(),

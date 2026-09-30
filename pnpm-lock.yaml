@@ -4,13 +4,32 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  nostr-tools: 2.23.12
+  dexie: 4.4.4
+
 importers:
 
   .:
     dependencies:
+      '@hashtree/core':
+        specifier: https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz
+        version: https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz
+      '@hashtree/dexie':
+        specifier: https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-dexie-0.1.11.tgz
+        version: https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-dexie-0.1.11.tgz
+      '@hashtree/worker':
+        specifier: https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-worker-0.4.5.tgz
+        version: https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-worker-0.4.5.tgz(nostr-social-graph@https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz(typescript@5.9.3))(typescript@5.9.3)
+      '@iris/hashtree-app':
+        specifier: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-hashtree-app-0.1.4.tgz
+        version: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-hashtree-app-0.1.4.tgz(@hashtree/core@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz)(nostr-tools@2.23.12(typescript@5.9.3))(svelte@5.56.5)
+      '@iris/identity':
+        specifier: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-identity-0.3.1.tgz
+        version: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-identity-0.3.1.tgz(nostr-social-graph@https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz(typescript@5.9.3))(typescript@5.9.3)
       '@iris/svelte-ui':
-        specifier: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.1/iris-svelte-ui-0.1.1.tgz
-        version: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.1/iris-svelte-ui-0.1.1.tgz(svelte@5.56.5)
+        specifier: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-svelte-ui-0.1.2.tgz
+        version: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-svelte-ui-0.1.2.tgz(svelte@5.56.5)
       '@noble/hashes':
         specifier: ^2.2.0
         version: 2.2.0
@@ -20,11 +39,14 @@ importers:
       minidenticons:
         specifier: ^4.2.1
         version: 4.2.1
-      ndk:
-        specifier: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.2/ndk-0.2.1.tgz
-        version: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.2/ndk-0.2.1.tgz(typescript@5.9.3)
+      nostr-pubsub:
+        specifier: https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.11/nostr-pubsub-0.5.11.tgz
+        version: https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.11/nostr-pubsub-0.5.11.tgz(nostr-tools@2.23.12(typescript@5.9.3))
+      nostr-social-graph:
+        specifier: https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz
+        version: https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz(typescript@5.9.3)
       nostr-tools:
-        specifier: ^2.23.12
+        specifier: 2.23.12
         version: 2.23.12(typescript@5.9.3)
     devDependencies:
       '@iconify-json/carbon':
@@ -45,6 +67,9 @@ importers:
       '@types/node':
         specifier: ^24.13.3
         version: 24.13.3
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
       '@unocss/preset-icons':
         specifier: ^66.7.5
         version: 66.7.5
@@ -75,6 +100,9 @@ importers:
       vitest:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(terser@5.49.0)
+      ws:
+        specifier: 8.18.3
+        version: 8.18.3
 
 packages:
 
@@ -753,6 +781,49 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@fips/tcp@https://github.com/mmalmi/fips-tcp/releases/download/v0.2.0/fips-tcp-0.2.0.tgz':
+    resolution: {integrity: sha512-KCJmltpx4cH76Sp+GOKJvYzQpwUTUtmyBA5bgcfS36ty8AxSgBQZxLdBwM59IER+B/rZpjRYFtqE6MPePL0o+w==, tarball: https://github.com/mmalmi/fips-tcp/releases/download/v0.2.0/fips-tcp-0.2.0.tgz}
+    version: 0.2.0
+
+  '@hashtree/collection@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-collection-0.2.10.tgz':
+    resolution: {integrity: sha512-K50NRsrVm3a9JA24zH5E+F3ve31ibb3fYeE6L8J1hSHCBYEuNqn2r4/awXC1mheMehG8r2074dfWe8n0qPe4oA==, tarball: https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-collection-0.2.10.tgz}
+    version: 0.2.10
+
+  '@hashtree/core@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz':
+    resolution: {integrity: sha512-OLd2ARbYKt9s7wipMX58OhJwZQ6XwIdkuJ+Zfp+NNz3rjXDV8kYl67S9HlrXOj5eSsy5SbN/JuKS8QuwXzEiRQ==, tarball: https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz}
+    version: 0.3.2
+
+  '@hashtree/dexie@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-dexie-0.1.11.tgz':
+    resolution: {integrity: sha512-NGe+rKVuyBrhlWeIemO0Hzd/mAcuN+PqpXYeg508dlvwuRrl+0GNIwRwPVh7e7Zg5VlwiKaN6E5itp9W6EZEGg==, tarball: https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-dexie-0.1.11.tgz}
+    version: 0.1.11
+
+  '@hashtree/index@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-index-0.1.14.tgz':
+    resolution: {integrity: sha512-5JAekyGQAb+6yhXramZhzaKZ8I8HpVrnDd6SZCF6y3sYOLge2zAPep0MpPJtYpNsD3HdXCIhUL1JK40YvKCgHA==, tarball: https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-index-0.1.14.tgz}
+    version: 0.1.14
+
+  '@hashtree/mesh@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-mesh-0.3.2.tgz':
+    resolution: {integrity: sha512-lYHxC3N3TWAVlxdudVkTGcrz9eb0k27nwhUZTFN9AUOvGqNV9q7aFVM6VG/RjD2mdMh9s900s2uUGxDK/5D+TQ==, tarball: https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-mesh-0.3.2.tgz}
+    version: 0.3.2
+
+  '@hashtree/nostr-pubsub@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-nostr-pubsub-0.1.5.tgz':
+    resolution: {integrity: sha512-vKU/EoxWS23tgl+vOvr1L+L8yjEcbGbraS91esuC0h/AsJ8Zcimhy/5ZO18BLpqtXSOGs+iOWeLoIr8kn1kbbw==, tarball: https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-nostr-pubsub-0.1.5.tgz}
+    version: 0.1.5
+    peerDependencies:
+      nostr-tools: 2.23.12
+
+  '@hashtree/nostr@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-nostr-0.2.5.tgz':
+    resolution: {integrity: sha512-SSFQtQOVxKPVoU4K9H/TunB7nRdyCqpjYaQV1KFV6goUAJRKFA4jqtI8PiNeSR/PmBL39jovw2bwWdPZbh/7Hg==, tarball: https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-nostr-0.2.5.tgz}
+    version: 0.2.5
+
+  '@hashtree/worker@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-worker-0.4.5.tgz':
+    resolution: {integrity: sha512-b6DPm6KwiBy31s+Uz6y+MDakp8mP4HLXWi7wxhB8YapbkiRPB9XOdn9eSgPL2sUMkO/uFCKGnqEF6uQ4Et/5Tg==, tarball: https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-worker-0.4.5.tgz}
+    version: 0.4.5
+    peerDependencies:
+      nostr-social-graph: '*'
+    peerDependenciesMeta:
+      nostr-social-graph:
+        optional: true
+
   '@iconify-json/carbon@1.2.24':
     resolution: {integrity: sha512-b7u/eTWE3xFa7UXlRJBSEm6At1y6+F0P3imBEip5/8QeRzouxVjBf80Y2xnu1GYsFo9MYlHA0bZfxxMd5givfw==}
 
@@ -762,9 +833,23 @@ packages:
   '@iconify/utils@3.1.4':
     resolution: {integrity: sha512-b1S7B1k9ohZ+iNTi2ATxbRYG9fTrJmUT0rc46bvVnNxqNRGW7dyo/vRREwyniI5IRN2RSJHDcm+s3BjWrSAjHw==}
 
-  '@iris/svelte-ui@https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.1/iris-svelte-ui-0.1.1.tgz':
-    resolution: {integrity: sha512-6ZjpDXTDXg7GjBE6i8ESc/mgU0LZ+0JQLsB1HGWP6MOnzSPNk1fE2suKfc+9tftazIMiPGVKrRUvCw0Muct1nQ==, tarball: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.1/iris-svelte-ui-0.1.1.tgz}
-    version: 0.1.1
+  '@iris/hashtree-app@https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-hashtree-app-0.1.4.tgz':
+    resolution: {integrity: sha512-OCyupIE19tdT7BzOMtC4JuiiRw7ozus1FVKV0HuEPbwF83FBG5VqTKvoUZipIMtngSAFVDlR9unKdHzKjMOlRw==, tarball: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-hashtree-app-0.1.4.tgz}
+    version: 0.1.4
+    peerDependencies:
+      '@hashtree/core': '>=0.1.8 <0.4.0'
+      nostr-tools: 2.23.12
+      svelte: ^5.0.0
+
+  '@iris/identity@https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-identity-0.3.1.tgz':
+    resolution: {integrity: sha512-HwLi00j/Buf85f//Q4FsKCzvDcidul2U+rNIkfwHZjusNPfJaw6p/Yk4nlKXGkpN4W+TGVj1tZmHGj9Tz8UBAg==, tarball: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-identity-0.3.1.tgz}
+    version: 0.3.1
+    peerDependencies:
+      nostr-social-graph: '*'
+
+  '@iris/svelte-ui@https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-svelte-ui-0.1.2.tgz':
+    resolution: {integrity: sha512-noT2jG+eDoZ+m7GI0+hUvE4obpClkSWdRLomw8zkyaEvcTjnkzGlndw7W0xX49Qv4iMF0ewXkMJcz+NBpdt9yQ==, tarball: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-svelte-ui-0.1.2.tgz}
+    version: 0.1.2
     peerDependencies:
       svelte: ^5.0.0
 
@@ -791,6 +876,10 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
+  '@msgpack/msgpack@3.1.3':
+    resolution: {integrity: sha512-47XIizs9XZXvuJgoaJUIE2lFoID8ugvc0jzSHP+Ptfk8nTbnR8g788wv48N03Kx0UkAv559HWRQ3yzOgzlRNUA==}
+    engines: {node: '>= 18'}
+
   '@napi-rs/wasm-runtime@1.1.6':
     resolution: {integrity: sha512-ZLv/JdUfkvOy9eCnnBaGfiO+XimbjebAeO+MRQqD/B+FR1tnRN0tpKSJHRbE8sFfS6aqsXZ67TQjfwfsxULVbg==}
     peerDependencies:
@@ -801,17 +890,9 @@ packages:
     resolution: {integrity: sha512-bysYuiVfhxNJuldNXlFEitTVdNnYUc+XNJZd7Qm2a5j1vZHgY+fazadNFWFaMK/2vye0JVlxV3gHmC0WDfAOQw==}
     engines: {node: '>= 20.19.0'}
 
-  '@noble/curves@1.9.7':
-    resolution: {integrity: sha512-gbKGcRUYIjA3/zCCNaWDciTMFI0dCkvou3TL8Zmy5Nc7sJ47a0jtOeZoTaMxkuqRo9cRhjOdZJXegxYE5FN/xw==}
-    engines: {node: ^14.21.3 || >=16}
-
   '@noble/curves@2.0.1':
     resolution: {integrity: sha512-vs1Az2OOTBiP4q0pwjW5aF0xp9n4MxVrmkFBxc6EKZc6ddYx5gaZiAsZoq0uRRXWbi3AT/sBqn05eRPtn1JCPw==}
     engines: {node: '>= 20.19.0'}
-
-  '@noble/hashes@1.8.0':
-    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
-    engines: {node: ^14.21.3 || >=16}
 
   '@noble/hashes@2.0.1':
     resolution: {integrity: sha512-XlOlEbQcE9fmuXxrVTXCTlG2nlRXa9Rj3rr5Ue/+tX+nmkgbX720YHh0VR3hBF9xDvwnb8D2shVGOwNx+ulArw==}
@@ -1131,9 +1212,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@scure/base@1.1.1':
-    resolution: {integrity: sha512-ZxOhsSyxYwLJj3pLZCefNitxsj093tb2vq90mp2txoYeBqbcjDjqFhyM8eUjq/uFm6zJ+mUuqxlS2FkuSY1MTA==}
-
   '@scure/base@2.0.0':
     resolution: {integrity: sha512-3E1kpuZginKkek01ovG8krQ0Z44E3DHPjc5S2rjJw9lZn3KSQOs8S7wqikF/AH7iRanHypj85uGyxk0XAyC37w==}
 
@@ -1180,6 +1258,9 @@ packages:
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
 
+  '@types/cors@2.8.19':
+    resolution: {integrity: sha512-mFNylyeyqN93lfe/9CSxOGREz8cpzAhH+E93xJ4xWQf62V8sQ/24reV2nyzUWM6H6Xji+GGHpkbLe7pVoUEskg==}
+
   '@types/debug@4.1.13':
     resolution: {integrity: sha512-KSVgmQmzMwPlmtljOomayoR89W4FynCAi3E8PPs7vmDVPe84hT+vGPKkJfThkmXs0x0jAaa9U8uW8bbfyS2fWw==}
 
@@ -1200,6 +1281,9 @@ packages:
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@unocss/cli@66.7.5':
     resolution: {integrity: sha512-fgWkECRn2LGVo9sEpmjk/KJ3NSKUDitaZCNrJcEYM93DG+ELriTHcL+VWBlF4rcZf9fdGlq1nKbbRHUZirFCHQ==}
@@ -1447,6 +1531,10 @@ packages:
   core-js-compat@3.49.0:
     resolution: {integrity: sha512-VQXt1jr9cBz03b331DFDCCP90b3fanciLkgiOoy8SBHy06gNf+vQ1A3WFLqG7I8TipYIKeYK9wxd0tUrvHcOZA==}
 
+  cors@2.8.6:
+    resolution: {integrity: sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==}
+    engines: {node: '>= 0.10'}
+
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
@@ -1504,6 +1592,9 @@ packages:
 
   devalue@5.8.1:
     resolution: {integrity: sha512-4CXDYRBGqN+57wVJkuXBYmpAVUSg3L6JAQa/DFqm238G73E1wuyc/JhGQJzN7vUf/CMphYau2zXbfWzDR5aTEw==}
+
+  dexie@4.4.4:
+    resolution: {integrity: sha512-jIwsYI8Os2hgnqc6O49YwFDKGc5v5QjGx0wPVp543ip1F53VFAKMLthV2pQosQcVTv3eAskTWYspOx195PM0FQ==}
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -1878,9 +1969,6 @@ packages:
     resolution: {integrity: sha512-qsda+H8jTaUaN/x5vzW2rzc+8Rw4TAQ/4KjB46IwK5VH+IlVeeeje/EoZRpiXvIqjFgK84QffqPztGI3VBLG1A==}
     engines: {node: '>=6'}
 
-  light-bolt11-decoder@3.2.0:
-    resolution: {integrity: sha512-3QEofgiBOP4Ehs9BI+RkZdXZNtSys0nsJ6fyGeSiAGCBsMwHGUDS/JQlY/sTnWs91A2Nh0S9XXfA8Sy9g6QpuQ==}
-
   locate-character@3.0.0:
     resolution: {integrity: sha512-SW13ws7BjaeJ6p7Q6CO2nchbYEc3X3J6WrmTTDto7yMPqVSZTUyY5Tjbid+Ab8gLnATtygYtiDIJGQRRn2ZOiA==}
 
@@ -1948,16 +2036,22 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  ndk@https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.2/ndk-0.2.1.tgz:
-    resolution: {integrity: sha512-ipX47l/sNwq8uq3xrUabLFEhxExaaiQg7Q7KO/ik3e3bdTlW3fLtvfsb3k21uLjGdf0c179k/m0i8oqYnfSQ2A==, tarball: https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.2/ndk-0.2.1.tgz}
-    version: 0.2.1
-
   node-fetch-native@1.6.7:
     resolution: {integrity: sha512-g9yhqoedzIUm0nTnTqAQvueMPVOuIY16bqgAJJC8XOOubYFNwz6IER9qs0Gq2Xd0+CecCKFjtdDTMA4u4xG06Q==}
 
   node-releases@2.0.51:
     resolution: {integrity: sha512-wRNIrw4DmVLKQlbgOMdkMx27Wrpzes2hh5Jtbi2bjPd+4wJstWIqP5A+lscnqbm0xxmT5Bpg8Lec5ItEBwx6BQ==}
     engines: {node: '>=18'}
+
+  nostr-pubsub@https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.11/nostr-pubsub-0.5.11.tgz:
+    resolution: {integrity: sha512-wyHDPvyDPSQo6JRuof5tx5Mn2WdA6W6asiGR+VEKF9hRKGNfobAcbWlShGtCmJFLa/tjAVj8vY5tGbxfrgOJrQ==, tarball: https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.11/nostr-pubsub-0.5.11.tgz}
+    version: 0.5.11
+    peerDependencies:
+      nostr-tools: 2.23.12
+
+  nostr-social-graph@https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz:
+    resolution: {integrity: sha512-7bR840Fmz7wYaHi0P9fXxxKlQSphFARmj2VBMIQdFvrNT584bj6ci18GaeJ49OghutUot/FwHmPOTjYqmg6koA==, tarball: https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz}
+    version: 2.0.1
 
   nostr-tools@2.23.12:
     resolution: {integrity: sha512-dLE9r0b4pCmrOKLUPD0KhUj9IXeh6RwiYoonEWeBh2AaDmlczUjJqJC8pQfggXzKUZ7+uZvhcrKkfwuZk0/e1g==}
@@ -1967,16 +2061,12 @@ packages:
       typescript:
         optional: true
 
-  nostr-tools@2.23.3:
-    resolution: {integrity: sha512-AALyt9k8xPdF4UV2mlLJ2mgCn4kpTB0DZ8t2r6wjdUh6anfx2cTVBsHUlo9U0EY/cKC5wcNyiMAmRJV5OVEalA==}
-    peerDependencies:
-      typescript: '>=5.0.0'
-    peerDependenciesMeta:
-      typescript:
-        optional: true
-
   nostr-wasm@0.1.0:
     resolution: {integrity: sha512-78BTryCLcLYv96ONU8Ws3Q1JzjlAt+43pWQhIl86xZmWeegYCNLPml7yQ+gG3vR6V5h4XGj+TxO+SS5dsThQIA==}
+
+  object-assign@4.1.1:
+    resolution: {integrity: sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==}
+    engines: {node: '>=0.10.0'}
 
   object-inspect@1.13.4:
     resolution: {integrity: sha512-W67iLl4J2EXEGTbfeHCffrjDfitvLANg0UlX3wFUUSTx92KXRFegMHUVgSqE+wvhAbi4WqjGg9czysTV2Epbew==}
@@ -2322,9 +2412,6 @@ packages:
   tr46@1.0.1:
     resolution: {integrity: sha512-dTpowEjclQ7Kgx5SdBkqRzVhERQXov8/l9Ft9dVM9fmg0W0KQSVaXX9T4i6twCPNtYiZM53lpSSUAwJbFPOHxA==}
 
-  tseep@1.3.1:
-    resolution: {integrity: sha512-ZPtfk1tQnZVyr7BPtbJ93qaAh2lZuIOpTMjhrYa4XctT8xe7t4SAW9LIxrySDuYMsfNNayE51E/WNGrNVgVicQ==}
-
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
@@ -2350,9 +2437,6 @@ packages:
   typed-array-length@1.0.8:
     resolution: {integrity: sha512-phPGCwqr2+Qo0fwniCE8e4pKnGu/yFb5nD5Y8bf0EEeiI5GklnACYA9GFy/DrAeRrKHXvHn+1SUsOWgJp6RO+g==}
     engines: {node: '>= 0.4'}
-
-  typescript-lru-cache@2.0.0:
-    resolution: {integrity: sha512-Jp57Qyy8wXeMkdNuZiglE6v2Cypg13eDA1chHwDG6kq51X7gk4K7P7HaDdzZKCxkegXkVHNcPD0n5aW6OZH3aA==}
 
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
@@ -2430,6 +2514,10 @@ packages:
     hasBin: true
     peerDependencies:
       browserslist: '>= 4.21.0'
+
+  vary@1.1.2:
+    resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
+    engines: {node: '>= 0.8'}
 
   vite-node@3.2.4:
     resolution: {integrity: sha512-EbKSKh+bh1E1IFxeO0pg1n4dvoOTt0UDiXMd/qn++r98+jPO1xtJilvXldeuQ8giIB5IkpjCgMleHMNEsGH6pg==}
@@ -2607,6 +2695,18 @@ packages:
 
   workbox-window@7.4.1:
     resolution: {integrity: sha512-notZDH2u8VXaqyuD7xaqIfEFi6SRM4SUSd7ewe9PDsVqADuepxX2ZMY3uvuZGxzY5ZOsGC/vD3A/3smFtJt4/A==}
+
+  ws@8.18.3:
+    resolution: {integrity: sha512-PEIGCY5tSlUt50cqyMXfCzX+oOPqN0vuGqWzbcJ2xvnkzkq46oOpz7dQaTDBdfICb4N14+GARUDw2XV2N4tvzg==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
 
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
@@ -3384,6 +3484,67 @@ snapshots:
   '@esbuild/win32-x64@0.28.1':
     optional: true
 
+  '@fips/tcp@https://github.com/mmalmi/fips-tcp/releases/download/v0.2.0/fips-tcp-0.2.0.tgz': {}
+
+  '@hashtree/collection@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-collection-0.2.10.tgz':
+    dependencies:
+      '@hashtree/core': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz
+      '@hashtree/index': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-index-0.1.14.tgz
+
+  '@hashtree/core@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz':
+    dependencies:
+      '@msgpack/msgpack': 3.1.3
+      '@noble/hashes': 2.2.0
+      '@scure/base': 2.0.0
+
+  '@hashtree/dexie@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-dexie-0.1.11.tgz':
+    dependencies:
+      '@hashtree/core': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz
+      dexie: 4.4.4
+
+  '@hashtree/index@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-index-0.1.14.tgz':
+    dependencies:
+      '@hashtree/core': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz
+
+  '@hashtree/mesh@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-mesh-0.3.2.tgz':
+    dependencies:
+      '@hashtree/core': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz
+
+  '@hashtree/nostr-pubsub@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-nostr-pubsub-0.1.5.tgz(nostr-tools@2.23.12(typescript@5.9.3))(typescript@5.9.3)':
+    dependencies:
+      '@hashtree/core': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz
+      '@hashtree/nostr': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-nostr-0.2.5.tgz(typescript@5.9.3)
+      nostr-pubsub: https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.11/nostr-pubsub-0.5.11.tgz(nostr-tools@2.23.12(typescript@5.9.3))
+      nostr-tools: 2.23.12(typescript@5.9.3)
+    transitivePeerDependencies:
+      - typescript
+
+  '@hashtree/nostr@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-nostr-0.2.5.tgz(typescript@5.9.3)':
+    dependencies:
+      '@hashtree/collection': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-collection-0.2.10.tgz
+      '@hashtree/core': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz
+      '@hashtree/index': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-index-0.1.14.tgz
+      '@msgpack/msgpack': 3.1.3
+      nostr-tools: 2.23.12(typescript@5.9.3)
+    transitivePeerDependencies:
+      - typescript
+
+  '@hashtree/worker@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-worker-0.4.5.tgz(nostr-social-graph@https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz(typescript@5.9.3))(typescript@5.9.3)':
+    dependencies:
+      '@hashtree/core': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz
+      '@hashtree/dexie': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-dexie-0.1.11.tgz
+      '@hashtree/mesh': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-mesh-0.3.2.tgz
+      '@hashtree/nostr': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-nostr-0.2.5.tgz(typescript@5.9.3)
+      '@hashtree/nostr-pubsub': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-nostr-pubsub-0.1.5.tgz(nostr-tools@2.23.12(typescript@5.9.3))(typescript@5.9.3)
+      '@msgpack/msgpack': 3.1.3
+      dexie: 4.4.4
+      nostr-pubsub: https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.11/nostr-pubsub-0.5.11.tgz(nostr-tools@2.23.12(typescript@5.9.3))
+      nostr-tools: 2.23.12(typescript@5.9.3)
+    optionalDependencies:
+      nostr-social-graph: https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz(typescript@5.9.3)
+    transitivePeerDependencies:
+      - typescript
+
   '@iconify-json/carbon@1.2.24':
     dependencies:
       '@iconify/types': 2.0.0
@@ -3396,7 +3557,20 @@ snapshots:
       '@iconify/types': 2.0.0
       import-meta-resolve: 4.2.0
 
-  '@iris/svelte-ui@https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.1/iris-svelte-ui-0.1.1.tgz(svelte@5.56.5)':
+  '@iris/hashtree-app@https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-hashtree-app-0.1.4.tgz(@hashtree/core@https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz)(nostr-tools@2.23.12(typescript@5.9.3))(svelte@5.56.5)':
+    dependencies:
+      '@hashtree/core': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz
+      nostr-tools: 2.23.12(typescript@5.9.3)
+      svelte: 5.56.5
+
+  '@iris/identity@https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-identity-0.3.1.tgz(nostr-social-graph@https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz(typescript@5.9.3))(typescript@5.9.3)':
+    dependencies:
+      nostr-social-graph: https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz(typescript@5.9.3)
+      nostr-tools: 2.23.12(typescript@5.9.3)
+    transitivePeerDependencies:
+      - typescript
+
+  '@iris/svelte-ui@https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-svelte-ui-0.1.2.tgz(svelte@5.56.5)':
     dependencies:
       minidenticons: 4.2.1
       svelte: 5.56.5
@@ -3427,6 +3601,8 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
+  '@msgpack/msgpack@3.1.3': {}
+
   '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:
       '@emnapi/core': 1.10.0
@@ -3436,15 +3612,9 @@ snapshots:
 
   '@noble/ciphers@2.1.1': {}
 
-  '@noble/curves@1.9.7':
-    dependencies:
-      '@noble/hashes': 1.8.0
-
   '@noble/curves@2.0.1':
     dependencies:
       '@noble/hashes': 2.0.1
-
-  '@noble/hashes@1.8.0': {}
 
   '@noble/hashes@2.0.1': {}
 
@@ -3646,8 +3816,6 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.62.2':
     optional: true
 
-  '@scure/base@1.1.1': {}
-
   '@scure/base@2.0.0': {}
 
   '@scure/bip32@2.0.1':
@@ -3703,6 +3871,10 @@ snapshots:
       '@types/deep-eql': 4.0.2
       assertion-error: 2.0.1
 
+  '@types/cors@2.8.19':
+    dependencies:
+      '@types/node': 24.13.3
+
   '@types/debug@4.1.13':
     dependencies:
       '@types/ms': 2.1.0
@@ -3720,6 +3892,10 @@ snapshots:
   '@types/resolve@1.20.2': {}
 
   '@types/trusted-types@2.0.7': {}
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 24.13.3
 
   '@unocss/cli@66.7.5':
     dependencies:
@@ -4039,6 +4215,11 @@ snapshots:
     dependencies:
       browserslist: 4.28.6
 
+  cors@2.8.6:
+    dependencies:
+      object-assign: 4.1.1
+      vary: 1.1.2
+
   cross-spawn@7.0.6:
     dependencies:
       path-key: 3.1.1
@@ -4095,6 +4276,8 @@ snapshots:
   destr@2.0.5: {}
 
   devalue@5.8.1: {}
+
+  dexie@4.4.4: {}
 
   dunder-proto@1.0.1:
     dependencies:
@@ -4535,10 +4718,6 @@ snapshots:
 
   leven@3.1.0: {}
 
-  light-bolt11-decoder@3.2.0:
-    dependencies:
-      '@scure/base': 1.1.1
-
   locate-character@3.0.0: {}
 
   lodash.debounce@4.0.8: {}
@@ -4598,24 +4777,24 @@ snapshots:
 
   nanoid@3.3.16: {}
 
-  ndk@https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.2/ndk-0.2.1.tgz(typescript@5.9.3):
-    dependencies:
-      '@noble/curves': 1.9.7
-      '@noble/hashes': 1.8.0
-      '@scure/base': 2.0.0
-      '@types/debug': 4.1.13
-      debug: 4.4.3
-      light-bolt11-decoder: 3.2.0
-      nostr-tools: 2.23.3(typescript@5.9.3)
-      tseep: 1.3.1
-      typescript-lru-cache: 2.0.0
-    transitivePeerDependencies:
-      - supports-color
-      - typescript
-
   node-fetch-native@1.6.7: {}
 
   node-releases@2.0.51: {}
+
+  nostr-pubsub@https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.11/nostr-pubsub-0.5.11.tgz(nostr-tools@2.23.12(typescript@5.9.3)):
+    dependencies:
+      '@fips/tcp': https://github.com/mmalmi/fips-tcp/releases/download/v0.2.0/fips-tcp-0.2.0.tgz
+      nostr-tools: 2.23.12(typescript@5.9.3)
+
+  nostr-social-graph@https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz(typescript@5.9.3):
+    dependencies:
+      '@msgpack/msgpack': 3.1.3
+      '@noble/hashes': 2.2.0
+      '@types/cors': 2.8.19
+      cors: 2.8.6
+      nostr-tools: 2.23.12(typescript@5.9.3)
+    transitivePeerDependencies:
+      - typescript
 
   nostr-tools@2.23.12(typescript@5.9.3):
     dependencies:
@@ -4629,19 +4808,9 @@ snapshots:
     optionalDependencies:
       typescript: 5.9.3
 
-  nostr-tools@2.23.3(typescript@5.9.3):
-    dependencies:
-      '@noble/ciphers': 2.1.1
-      '@noble/curves': 2.0.1
-      '@noble/hashes': 2.0.1
-      '@scure/base': 2.0.0
-      '@scure/bip32': 2.0.1
-      '@scure/bip39': 2.0.1
-      nostr-wasm: 0.1.0
-    optionalDependencies:
-      typescript: 5.9.3
-
   nostr-wasm@0.1.0: {}
+
+  object-assign@4.1.1: {}
 
   object-inspect@1.13.4: {}
 
@@ -5084,8 +5253,6 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  tseep@1.3.1: {}
-
   tslib@2.8.1:
     optional: true
 
@@ -5125,8 +5292,6 @@ snapshots:
       is-typed-array: 1.1.15
       possible-typed-array-names: 1.1.0
       reflect.getprototypeof: 1.0.10
-
-  typescript-lru-cache@2.0.0: {}
 
   typescript@5.9.3: {}
 
@@ -5212,6 +5377,8 @@ snapshots:
       browserslist: 4.28.6
       escalade: 3.2.0
       picocolors: 1.1.1
+
+  vary@1.1.2: {}
 
   vite-node@3.2.4(@types/node@24.13.3)(jiti@2.7.0)(terser@5.49.0):
     dependencies:
@@ -5477,6 +5644,8 @@ snapshots:
     dependencies:
       '@types/trusted-types': 2.0.7
       workbox-core: 7.4.1
+
+  ws@8.18.3: {}
 
   yallist@3.1.1: {}
 

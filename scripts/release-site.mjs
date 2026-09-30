@@ -211,6 +211,9 @@ export function createReleasePlan(options) {
       command: ['pnpm', 'run', 'smoke:portable'],
       cwd: appDir,
     },
+    { id: 'test-check', label: 'Check Iris Meet types', command: ['pnpm', 'run', 'check'], cwd: appDir },
+    { id: 'test-calls', label: 'Test Iris Meet signaling and calls', command: ['pnpm', 'run', 'test:e2e'], cwd: appDir },
+    { id: 'test-offline', label: 'Test Iris Meet offline session', command: ['pnpm', 'run', 'test:offline'], cwd: appDir },
     {
       id: 'publish',
       label: `Publish ${profile.appName} to hashtree`,

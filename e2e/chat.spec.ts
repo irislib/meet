@@ -35,7 +35,15 @@ test.describe('Chat', () => {
     await expect(page2.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
 
     // Wait for WebRTC connection and data channels to establish
-    await page1.waitForTimeout(3000);
+    await expect.poll(() => page1.evaluate(async () => {
+      const path = '/src/lib/webrtc.ts';
+      const { participants } = await import(path);
+      let open = false;
+      participants.subscribe((peers: Map<string, { dataChannel: RTCDataChannel | null }>) => {
+        open = peers.size > 0 && [...peers.values()].every(peer => peer.dataChannel?.readyState === 'open');
+      })();
+      return open;
+    })).toBe(true);
 
     // User 1: Open chat and send a message
     await page1.getByTitle('Open chat').click();

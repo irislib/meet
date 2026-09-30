@@ -1,6 +1,7 @@
-import NDK, { NDKPrivateKeySigner, NDKNip07Signer } from 'ndk'
+import { createNostrIdentitySignerFromSecretKey, createNostrIdentitySignerFromNip07, type NostrIdentityEventSigner } from '@iris/identity/signers'
+import { nostr } from './nostr'
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
-import { writable, derived, get } from 'svelte/store'
+import { writable, derived } from 'svelte/store'
 import { saveLocalProfile, clearLocalProfile, getLocalProfile } from './profile'
 
 // Helper functions
@@ -18,7 +19,7 @@ function hexToBytes(hex: string): Uint8Array {
 
 export interface Identity {
   pubkey: string
-  signer: NDKPrivateKeySigner | NDKNip07Signer
+  signer: NostrIdentityEventSigner
   displayName: string | null
   isNip07: boolean
 }
@@ -28,23 +29,6 @@ const IDENTITY_STORAGE_KEY = 'iris-meet-identity'
 export const identity = writable<Identity | null>(null)
 
 export const isLoggedIn = derived(identity, $identity => $identity !== null)
-
-const DEFAULT_RELAYS = [
-  'wss://temp.iris.to',
-  'wss://relay.damus.io',
-  'wss://relay.snort.social',
-  'wss://relay.nostr.band',
-  'wss://relay.primal.net',
-  'wss://nos.lol',
-]
-
-// Create NDK instance immediately and start connecting
-const ndkInstance = new NDK({
-  explicitRelayUrls: DEFAULT_RELAYS,
-})
-ndkInstance.connect()
-
-export const ndk = writable<NDK>(ndkInstance)
 
 export function parseNsecFromHash(): string | null {
   const hash = window.location.hash
@@ -97,14 +81,13 @@ export function clearStoredIdentity(): void {
 }
 
 export async function loginWithPrivkey(privkeyHex: string, displayName: string | null = null): Promise<void> {
-  const signer = new NDKPrivateKeySigner(privkeyHex)
-  const user = await signer.user()
+  const signer = createNostrIdentitySignerFromSecretKey(hexToBytes(privkeyHex))
+  const pubkey = await signer.getPublicKey()
 
-  // Set signer on existing NDK instance
-  ndkInstance.signer = signer
+  nostr.signer = signer
 
   identity.set({
-    pubkey: user.pubkey,
+    pubkey,
     signer,
     displayName,
     isNip07: false,
@@ -112,7 +95,7 @@ export async function loginWithPrivkey(privkeyHex: string, displayName: string |
 
   // Save local profile rumor for display in UI and sending to peers
   if (displayName) {
-    saveLocalProfile(user.pubkey, displayName)
+    saveLocalProfile(pubkey, displayName)
   }
 
   saveIdentity(privkeyHex)
@@ -123,14 +106,13 @@ export async function loginWithNip07(displayName: string | null = null): Promise
     throw new Error('No NIP-07 extension found')
   }
 
-  const signer = new NDKNip07Signer()
-  const user = await signer.user()
+  const signer = createNostrIdentitySignerFromNip07(window.nostr)
+  const pubkey = await signer.getPublicKey()
 
-  // Set signer on existing NDK instance
-  ndkInstance.signer = signer
+  nostr.signer = signer
 
   identity.set({
-    pubkey: user.pubkey,
+    pubkey,
     signer,
     displayName,
     isNip07: true,
@@ -178,7 +160,7 @@ export async function autoLogin(displayName: string | null = null): Promise<bool
 }
 
 export function logout(): void {
-  ndkInstance.signer = undefined
+  nostr.signer = undefined
   identity.set(null)
   clearStoredIdentity()
   clearLocalProfile()
@@ -186,13 +168,4 @@ export function logout(): void {
 
 export function hasNip07(): boolean {
   return typeof window !== 'undefined' && !!window.nostr
-}
-
-// Get the private key hex from current identity (only works for non-NIP07)
-export function getPrivkeyHex(): string | null {
-  const currentIdentity = get(identity)
-  if (!currentIdentity || currentIdentity.isNip07) return null
-
-  const signer = currentIdentity.signer as NDKPrivateKeySigner
-  return signer.privateKey || null
 }

@@ -1,7 +1,8 @@
 import { writable, get } from 'svelte/store'
-import type NDK from 'ndk'
-import { NDKEvent, NDKKind, NDKSubscription, NDKPrivateKeySigner } from 'ndk'
-import { identity, ndk } from './identity'
+import { createNostrIdentitySignerFromSecretKey, type NostrIdentityEventSigner } from '@iris/identity/signers'
+import type { Event, EventSubscription } from '@iris/hashtree-app/nostr'
+import { nostr } from './nostr'
+import { identity } from './identity'
 import { getDisplayName } from './animalNames'
 import { createMeetingEncryption, encryptForPeer, decryptFromPeer, type MeetingEncryption } from './encryption'
 import { getLocalProfile, addProfileToCache, type Profile } from './profile'
@@ -84,7 +85,7 @@ export const unreadCount = writable<number>(0)
 export const focusedPubkey = writable<string | null>(null)
 
 // Kind for signaling events
-const SIGNAL_KIND = 25050 as NDKKind
+const SIGNAL_KIND = 25050
 
 // Persist media preferences per meeting
 const MEDIA_PREFS_KEY = 'iris-meet-media-prefs'
@@ -131,9 +132,9 @@ export async function restoreMediaPrefsForMeeting(meetingId: string): Promise<vo
 }
 
 let meetingEncryption: MeetingEncryption | null = null
-let meetingSigner: NDKPrivateKeySigner | null = null
+let meetingSigner: NostrIdentityEventSigner | null = null
 let activeMeetingId: string | null = null
-let signalSubscription: NDKSubscription | null = null
+let signalSubscription: EventSubscription | null = null
 let presenceInterval: ReturnType<typeof setInterval> | null = null
 let joinedAt: number = 0 // Unix timestamp (seconds) when we joined
 
@@ -478,9 +479,8 @@ export async function toggleScreenShare(): Promise<boolean> {
 }
 
 async function sendSignal(payload: Omit<SignalPayload, 'from' | 'fromName'>): Promise<void> {
-  const ndkInstance = get(ndk)
   const currentIdentity = get(identity)
-  if (!ndkInstance || !currentIdentity || !meetingEncryption || !meetingSigner) return
+  if (!currentIdentity || !meetingEncryption || !meetingSigner) return
 
   const isDirectMessage = payload.to && ['offer', 'answer', 'ice-candidate'].includes(payload.type)
 
@@ -505,15 +505,17 @@ async function sendSignal(payload: Omit<SignalPayload, 'from' | 'fromName'>): Pr
 
   // Encrypt the payload with the meeting key
   const plaintext = JSON.stringify(fullPayload)
-  const ciphertext = meetingEncryption.encrypt(plaintext, meetingEncryption.roomPrivkey)
+  const ciphertext = meetingEncryption.encrypt(plaintext)
 
-  const event = new NDKEvent(ndkInstance)
-  event.kind = SIGNAL_KIND
-  event.content = ciphertext
-
-  // Sign with meeting's key so events are authored by meeting pubkey
-  await event.sign(meetingSigner)
-  await event.publish()
+  const event = await meetingSigner.signEvent({
+    kind: SIGNAL_KIND,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [],
+    content: ciphertext,
+  })
+  // Peers can receive a signal before its relay acknowledges it. Keep call
+  // negotiation responsive while the runtime finishes delivery in the background.
+  void nostr.publish(event).catch(console.error)
 }
 
 async function broadcastMediaState(): Promise<void> {
@@ -824,6 +826,10 @@ async function handlePresence(payload: SignalPayload): Promise<void> {
     return new Map(p)
   })
 
+  // Newcomers cannot replay ephemeral presence. Introduce ourselves so either
+  // key ordering can discover the peer that must create the data channel.
+  await sendSignal({ type: 'presence' })
+
   // onnegotiationneeded will fire automatically and send the offer
   // (triggered by addTrack or createDataChannel in createPeerConnection)
 }
@@ -965,14 +971,13 @@ function handleMediaState(payload: SignalPayload): void {
 }
 
 export async function joinRoom(meetingPrivkeyHex: string): Promise<void> {
-  const ndkInstance = get(ndk)
   const currentIdentity = get(identity)
-  if (!ndkInstance || !currentIdentity) {
+  if (!currentIdentity) {
     throw new Error('Not logged in')
   }
 
   meetingEncryption = createMeetingEncryption(meetingPrivkeyHex)
-  meetingSigner = new NDKPrivateKeySigner(meetingPrivkeyHex)
+  meetingSigner = createNostrIdentitySignerFromSecretKey(Uint8Array.from(meetingPrivkeyHex.match(/../g)!, byte => parseInt(byte, 16)))
   activeMeetingId = meetingEncryption.roomPubkey
 
   // Clear any stale state
@@ -984,16 +989,16 @@ export async function joinRoom(meetingPrivkeyHex: string): Promise<void> {
   joinedAt = Math.floor(Date.now() / 1000) - 5
 
   // Subscribe to signals authored by the meeting's pubkey
-  signalSubscription = ndkInstance.subscribe(
+  signalSubscription = nostr.subscribe(
     {
       kinds: [SIGNAL_KIND],
       authors: [meetingEncryption.roomPubkey],
       since: joinedAt,
     },
-    { closeOnEose: false }
+    { closeAfterHistory: false }
   )
 
-  signalSubscription.on('event', async (event: NDKEvent) => {
+  signalSubscription.on('event', async (event: Event) => {
     try {
       // Ignore events older than when we joined (relay may return stale data)
       if (event.created_at && event.created_at < joinedAt) {
@@ -1001,7 +1006,7 @@ export async function joinRoom(meetingPrivkeyHex: string): Promise<void> {
       }
 
       // Decrypt the message using the meeting key
-      const plaintext = meetingEncryption!.decrypt(event.content, meetingEncryption!.roomPubkey)
+      const plaintext = meetingEncryption!.decrypt(event.content)
       const payload = JSON.parse(plaintext) as SignalPayload
       await handleSignalMessage(payload, event.id)
     } catch (err) {
@@ -1009,9 +1014,10 @@ export async function joinRoom(meetingPrivkeyHex: string): Promise<void> {
     }
   })
 
-  // Announce presence
-  await sendSignal({
-    type: 'presence',
+  // Wait until a relay installs our interest so the peer's reply and offer
+  // cannot race the batched request. The backend reports the first ready relay.
+  signalSubscription.on('history', () => {
+    void sendSignal({ type: 'presence' }).catch(console.error)
   })
 
   // Periodically announce presence for peer discovery reliability
