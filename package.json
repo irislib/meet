@@ -19,7 +19,8 @@
     "test:e2e": "playwright test",
     "smoke:portable": "node ./scripts/smoke-meet-iris-portable.mjs",
     "publish:iris": "node ./scripts/publish-iris-build.mjs",
-    "release:iris": "node ./scripts/release-site.mjs"
+    "release:iris": "node ./scripts/release-site.mjs",
+    "test:offline": "PW_PREVIEW=1 playwright test"
   },
   "devDependencies": {
     "@iconify-json/carbon": "^1.2.15",
@@ -37,14 +38,28 @@
     "unocss": "^66.5.10",
     "vite": "^7.2.4",
     "vite-plugin-pwa": "^1.2.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "ws": "8.18.3",
+    "@types/ws": "8.18.1"
   },
   "dependencies": {
-    "@iris/svelte-ui": "file:../iris-kit/packages/svelte-ui",
+    "@iris/svelte-ui": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-svelte-ui-0.1.2.tgz",
     "@noble/hashes": "^2.0.1",
     "@noble/secp256k1": "^3.0.0",
     "minidenticons": "^4.2.1",
-    "ndk": "file:../iris-kit/packages/ndk",
-    "nostr-tools": "^2.19.3"
+    "nostr-tools": "2.23.12",
+    "@iris/identity": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-identity-0.3.1.tgz",
+    "@iris/hashtree-app": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-hashtree-app-0.1.4.tgz",
+    "@hashtree/core": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz",
+    "@hashtree/dexie": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-dexie-0.1.11.tgz",
+    "@hashtree/worker": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-worker-0.4.5.tgz",
+    "nostr-pubsub": "https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.11/nostr-pubsub-0.5.11.tgz",
+    "nostr-social-graph": "https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz"
+  },
+  "pnpm": {
+    "overrides": {
+      "nostr-tools": "2.23.12",
+      "dexie": "4.4.4"
+    }
   }
 }

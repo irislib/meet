@@ -1,7 +1,6 @@
 import { nip44, getPublicKey } from 'nostr-tools'
 import { get } from 'svelte/store'
 import { identity } from './identity'
-import type { NDKPrivateKeySigner } from 'ndk'
 
 // Helper function
 function hexToBytes(hex: string): Uint8Array {
@@ -12,31 +11,10 @@ function hexToBytes(hex: string): Uint8Array {
   return bytes
 }
 
-// NIP-44 encryption using meeting room's shared secret
-// The meeting room key (hex privkey) is used to derive encryption keys
-
-export function getConversationKey(privkeyHex: string, pubkeyHex: string): Uint8Array {
-  const privkeyBytes = hexToBytes(privkeyHex)
-  return nip44.v2.utils.getConversationKey(privkeyBytes, pubkeyHex)
-}
-
-export function encrypt(plaintext: string, conversationKey: Uint8Array): string {
-  return nip44.v2.encrypt(plaintext, conversationKey)
-}
-
-export function decrypt(ciphertext: string, conversationKey: Uint8Array): string {
-  return nip44.v2.decrypt(ciphertext, conversationKey)
-}
-
-// For meeting rooms, we use a shared room key
-// All participants encrypt to the room's pubkey using their own privkey
-// This creates a unique encryption context for each participant-room pair
-
 export interface MeetingEncryption {
   roomPubkey: string
-  roomPrivkey: string
-  encrypt: (plaintext: string, senderPrivkey: string) => string
-  decrypt: (ciphertext: string, senderPubkey: string) => string
+  encrypt: (plaintext: string) => string
+  decrypt: (ciphertext: string) => string
 }
 
 export function createMeetingEncryption(roomPrivkeyHex: string): MeetingEncryption {
@@ -47,147 +25,37 @@ export function createMeetingEncryption(roomPrivkeyHex: string): MeetingEncrypti
 
   return {
     roomPubkey,
-    roomPrivkey: roomPrivkeyHex,
 
     // Encrypt message using shared room key
-    encrypt(plaintext: string, _senderPrivkey: string): string {
+    encrypt(plaintext: string): string {
       return nip44.v2.encrypt(plaintext, sharedKey)
     },
 
     // Decrypt message using shared room key
-    decrypt(ciphertext: string, _senderPubkey: string): string {
+    decrypt(ciphertext: string): string {
       return nip44.v2.decrypt(ciphertext, sharedKey)
     }
   }
 }
 
-// Encrypt data for a specific peer using identity keys (for E2E direct messages)
-export async function encryptForPeer(
-  data: any,
-  recipientPubkey: string
-): Promise<string | null> {
-  const currentIdentity = get(identity)
-  if (!currentIdentity) return null
-
+// Identity encryption uses the shared signer, including extension-managed keys.
+export async function encryptForPeer(data: unknown, recipientPubkey: string): Promise<string | null> {
+  const current = get(identity)
+  if (!current) return null
   const plaintext = JSON.stringify(data)
-
-  if (currentIdentity.isNip07) {
-    if (window.nostr?.nip44) {
-      return await window.nostr.nip44.encrypt(recipientPubkey, plaintext)
-    }
-    if (window.nostr?.nip04) {
-      return await window.nostr.nip04.encrypt(recipientPubkey, plaintext)
-    }
-    throw new Error('NIP-07 extension does not support encryption')
-  }
-
-  const signer = currentIdentity.signer as NDKPrivateKeySigner
-  const privkey = signer.privateKey
-  if (!privkey) throw new Error('No private key available')
-
-  const conversationKey = nip44.v2.utils.getConversationKey(hexToBytes(privkey), recipientPubkey)
-  return nip44.v2.encrypt(plaintext, conversationKey)
+  if (current.signer.nip44Encrypt) return current.signer.nip44Encrypt(recipientPubkey, plaintext)
+  if (current.isNip07 && window.nostr?.nip04) return window.nostr.nip04.encrypt(recipientPubkey, plaintext)
+  throw new Error('Your signer does not support encryption')
 }
 
-// Decrypt data from a specific peer using identity keys (for E2E direct messages)
-export async function decryptFromPeer(
-  ciphertext: string,
-  senderPubkey: string
-): Promise<any | null> {
-  const currentIdentity = get(identity)
-  if (!currentIdentity) return null
-
-  let plaintext: string
-
-  if (currentIdentity.isNip07) {
-    if (window.nostr?.nip44) {
-      plaintext = await window.nostr.nip44.decrypt(senderPubkey, ciphertext)
-    } else if (window.nostr?.nip04) {
-      plaintext = await window.nostr.nip04.decrypt(senderPubkey, ciphertext)
-    } else {
-      throw new Error('NIP-07 extension does not support decryption')
-    }
-  } else {
-    const signer = currentIdentity.signer as NDKPrivateKeySigner
-    const privkey = signer.privateKey
-    if (!privkey) throw new Error('No private key available')
-
-    const conversationKey = nip44.v2.utils.getConversationKey(hexToBytes(privkey), senderPubkey)
-    plaintext = nip44.v2.decrypt(ciphertext, conversationKey)
-  }
-
-  try {
-    return JSON.parse(plaintext)
-  } catch {
-    console.error('Failed to parse decrypted data')
-    return null
-  }
-}
-
-// Encrypt a signaling message for a specific peer
-export async function encryptSignal(
-  message: object,
-  recipientPubkey: string
-): Promise<string | null> {
-  const currentIdentity = get(identity)
-  if (!currentIdentity) return null
-
-  const plaintext = JSON.stringify(message)
-
-  if (currentIdentity.isNip07) {
-    // Use window.nostr NIP-44 if available
-    if (window.nostr?.nip44) {
-      return await window.nostr.nip44.encrypt(recipientPubkey, plaintext)
-    }
-    // Fall back to NIP-04 if NIP-44 not available
-    if (window.nostr?.nip04) {
-      return await window.nostr.nip04.encrypt(recipientPubkey, plaintext)
-    }
-    throw new Error('NIP-07 extension does not support encryption')
-  }
-
-  // Direct encryption with private key
-  const signer = currentIdentity.signer as NDKPrivateKeySigner
-  const privkey = signer.privateKey
-  if (!privkey) throw new Error('No private key available')
-
-  const conversationKey = nip44.v2.utils.getConversationKey(hexToBytes(privkey), recipientPubkey)
-  return nip44.v2.encrypt(plaintext, conversationKey)
-}
-
-// Decrypt a signaling message from a peer
-export async function decryptSignal(
-  ciphertext: string,
-  senderPubkey: string
-): Promise<object | null> {
-  const currentIdentity = get(identity)
-  if (!currentIdentity) return null
-
-  let plaintext: string
-
-  if (currentIdentity.isNip07) {
-    // Use window.nostr NIP-44 if available
-    if (window.nostr?.nip44) {
-      plaintext = await window.nostr.nip44.decrypt(senderPubkey, ciphertext)
-    } else if (window.nostr?.nip04) {
-      plaintext = await window.nostr.nip04.decrypt(senderPubkey, ciphertext)
-    } else {
-      throw new Error('NIP-07 extension does not support decryption')
-    }
-  } else {
-    // Direct decryption with private key
-    const signer = currentIdentity.signer as NDKPrivateKeySigner
-    const privkey = signer.privateKey
-    if (!privkey) throw new Error('No private key available')
-
-    const conversationKey = nip44.v2.utils.getConversationKey(hexToBytes(privkey), senderPubkey)
-    plaintext = nip44.v2.decrypt(ciphertext, conversationKey)
-  }
-
-  try {
-    return JSON.parse(plaintext)
-  } catch {
-    console.error('Failed to parse decrypted signal')
-    return null
-  }
+export async function decryptFromPeer(ciphertext: string, senderPubkey: string): Promise<any | null> {
+  const current = get(identity)
+  if (!current) return null
+  const plaintext = current.signer.nip44Decrypt
+    ? await current.signer.nip44Decrypt(senderPubkey, ciphertext)
+    : current.isNip07 && window.nostr?.nip04
+      ? await window.nostr.nip04.decrypt(senderPubkey, ciphertext)
+      : null
+  if (plaintext === null) throw new Error('Your signer does not support decryption')
+  try { return JSON.parse(plaintext) } catch { return null }
 }

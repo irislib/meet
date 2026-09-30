@@ -1,5 +1,5 @@
-import { writable, type Readable, get } from 'svelte/store'
-import { ndk } from './identity'
+import { writable, type Readable } from 'svelte/store'
+import { nostr } from './nostr'
 
 export interface Profile {
   pubkey: string
@@ -107,8 +107,7 @@ async function fetchProfile(pubkey: string): Promise<void> {
   pendingFetches.add(pubkey)
 
   try {
-    const ndkInstance = get(ndk)
-    const events = await ndkInstance.fetchEvents({ kinds: [0], authors: [pubkey], limit: 1 })
+    const events = await nostr.fetchEvents({ kinds: [0], authors: [pubkey], limit: 1 })
 
     if (events.size > 0) {
       const eventsArray = Array.from(events)
