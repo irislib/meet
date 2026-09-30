@@ -26,12 +26,12 @@ const releases = {
     "integrity": "sha512-NGe+rKVuyBrhlWeIemO0Hzd/mAcuN+PqpXYeg508dlvwuRrl+0GNIwRwPVh7e7Zg5VlwiKaN6E5itp9W6EZEGg=="
   },
   "@hashtree/worker": {
-    "url": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.10/hashtree-worker-0.4.6.tgz",
-    "integrity": "sha512-GodKoHNKrQpDJ4FgqEk4vk2QYbBLDH8IjV4Yv0u0Zwq0fGQA5aP01HGfEsl7QlvLk42s0lszKdkBNnetM8lVhw=="
+    "url": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.11/hashtree-worker-0.4.7.tgz",
+    "integrity": "sha512-ZIkcdIYY9XXKhi2w9HfsdrEFPSe0Qlm9+OSxVGGjBH/+YJf6lwQkrGR/00KqX4GAJVjI59B3rPwcqBAH6Mlo1Q=="
   },
   "nostr-pubsub": {
-    "url": "https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.12/nostr-pubsub-0.5.12.tgz",
-    "integrity": "sha512-qtoz+tpXuckjW2yXomBrI2vom20pdBZwpAb5XaIYVgpYMNM9fXoDq0XsyLiD/8tO0AUEeTE0WZKAnTVRZ21vvQ=="
+    "url": "https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.13/nostr-pubsub-0.5.13.tgz",
+    "integrity": "sha512-iL94fAtLDh5agPo/4qOgfy5QUmQL2GY/LFL4zp/H9U6St1+hJpLAcrA4eQLZlwyvtIXQu1tOtpdHkuhu4wEZ9A=="
   },
   "nostr-social-graph": {
     "url": "https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz",
