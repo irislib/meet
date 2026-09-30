@@ -6,16 +6,16 @@ const lockfile = await readFile(new URL('pnpm-lock.yaml', root), 'utf8')
 
 const releases = {
   "@iris/svelte-ui": {
-    "url": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-svelte-ui-0.1.2.tgz",
+    "url": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.6/iris-svelte-ui-0.1.2.tgz",
     "integrity": "sha512-noT2jG+eDoZ+m7GI0+hUvE4obpClkSWdRLomw8zkyaEvcTjnkzGlndw7W0xX49Qv4iMF0ewXkMJcz+NBpdt9yQ=="
   },
   "@iris/identity": {
-    "url": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-identity-0.3.1.tgz",
+    "url": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.6/iris-identity-0.3.1.tgz",
     "integrity": "sha512-HwLi00j/Buf85f//Q4FsKCzvDcidul2U+rNIkfwHZjusNPfJaw6p/Yk4nlKXGkpN4W+TGVj1tZmHGj9Tz8UBAg=="
   },
   "@iris/hashtree-app": {
-    "url": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-hashtree-app-0.1.4.tgz",
-    "integrity": "sha512-OCyupIE19tdT7BzOMtC4JuiiRw7ozus1FVKV0HuEPbwF83FBG5VqTKvoUZipIMtngSAFVDlR9unKdHzKjMOlRw=="
+    "url": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.6/iris-hashtree-app-0.1.5.tgz",
+    "integrity": "sha512-uBgvXaQwDv0R9rBrI9+qVfy/S31+hmtC5NwheV4wFcpd3e3qyCvB+6B7fE2GFdJMfitNvpVDKG3x6HXL+bBU1g=="
   },
   "@hashtree/core": {
     "url": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz",
@@ -26,12 +26,12 @@ const releases = {
     "integrity": "sha512-NGe+rKVuyBrhlWeIemO0Hzd/mAcuN+PqpXYeg508dlvwuRrl+0GNIwRwPVh7e7Zg5VlwiKaN6E5itp9W6EZEGg=="
   },
   "@hashtree/worker": {
-    "url": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-worker-0.4.5.tgz",
-    "integrity": "sha512-b6DPm6KwiBy31s+Uz6y+MDakp8mP4HLXWi7wxhB8YapbkiRPB9XOdn9eSgPL2sUMkO/uFCKGnqEF6uQ4Et/5Tg=="
+    "url": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.10/hashtree-worker-0.4.6.tgz",
+    "integrity": "sha512-GodKoHNKrQpDJ4FgqEk4vk2QYbBLDH8IjV4Yv0u0Zwq0fGQA5aP01HGfEsl7QlvLk42s0lszKdkBNnetM8lVhw=="
   },
   "nostr-pubsub": {
-    "url": "https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.11/nostr-pubsub-0.5.11.tgz",
-    "integrity": "sha512-wyHDPvyDPSQo6JRuof5tx5Mn2WdA6W6asiGR+VEKF9hRKGNfobAcbWlShGtCmJFLa/tjAVj8vY5tGbxfrgOJrQ=="
+    "url": "https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.12/nostr-pubsub-0.5.12.tgz",
+    "integrity": "sha512-qtoz+tpXuckjW2yXomBrI2vom20pdBZwpAb5XaIYVgpYMNM9fXoDq0XsyLiD/8tO0AUEeTE0WZKAnTVRZ21vvQ=="
   },
   "nostr-social-graph": {
     "url": "https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz",

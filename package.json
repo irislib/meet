@@ -44,17 +44,17 @@
     "@types/ws": "8.18.1"
   },
   "dependencies": {
-    "@iris/svelte-ui": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-svelte-ui-0.1.2.tgz",
+    "@iris/svelte-ui": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.6/iris-svelte-ui-0.1.2.tgz",
     "@noble/hashes": "^2.2.0",
     "@noble/secp256k1": "^3.1.0",
     "minidenticons": "^4.2.1",
     "nostr-tools": "2.23.12",
-    "@iris/identity": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-identity-0.3.1.tgz",
-    "@iris/hashtree-app": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.5/iris-hashtree-app-0.1.4.tgz",
+    "@iris/identity": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.6/iris-identity-0.3.1.tgz",
+    "@iris/hashtree-app": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.6/iris-hashtree-app-0.1.5.tgz",
     "@hashtree/core": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz",
     "@hashtree/dexie": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-dexie-0.1.11.tgz",
-    "@hashtree/worker": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-worker-0.4.5.tgz",
-    "nostr-pubsub": "https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.11/nostr-pubsub-0.5.11.tgz",
+    "@hashtree/worker": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.10/hashtree-worker-0.4.6.tgz",
+    "nostr-pubsub": "https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.12/nostr-pubsub-0.5.12.tgz",
     "nostr-social-graph": "https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz"
   },
   "pnpm": {
