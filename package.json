@@ -60,7 +60,8 @@
   "pnpm": {
     "overrides": {
       "nostr-tools": "2.23.12",
-      "dexie": "4.4.4"
+      "dexie": "4.4.4",
+      "@fips/tcp": "https://github.com/mmalmi/fips-tcp/releases/download/fips-tcp-v0.2.4/fips-tcp-0.2.3.tgz"
     }
   }
 }
