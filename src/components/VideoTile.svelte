@@ -22,7 +22,9 @@
     dispatch('click', { pubkey })
   }
 
-  $: if (videoElement && stream) {
+  // Participant heartbeats update props without changing the stream. Assigning
+  // the same srcObject again still restarts playback and briefly blanks video.
+  $: if (videoElement && videoElement.srcObject !== stream) {
     videoElement.srcObject = stream
   }
 
