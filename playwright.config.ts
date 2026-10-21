@@ -11,8 +11,8 @@ const workers = process.env.PW_WORKERS ? parseInt(process.env.PW_WORKERS, 10) : 
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: usePreview ? undefined : /offline\.spec\.ts/,
-  testMatch: usePreview ? /offline\.spec\.ts/ : undefined,
+  testIgnore: usePreview ? undefined : /(?:offline|updates)\.spec\.ts/,
+  testMatch: usePreview ? /(?:offline|updates)\.spec\.ts/ : undefined,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -32,6 +32,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
+          executablePath: process.env.PW_BROWSER_EXECUTABLE,
           args: [
             '--use-fake-ui-for-media-stream',
             '--use-fake-device-for-media-stream',

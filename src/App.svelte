@@ -13,8 +13,13 @@
 
   let view: View = 'login'
   let initializing = true
+  let updateAvailable = false
   let showUserMenu = false
   const meetIconUrl = `${import.meta.env.BASE_URL}iris-meet-icon.svg`
+
+  // Refresh idle pages when a release activates. In a room, let the attendee
+  // choose when to reload so an update cannot unexpectedly end their call.
+  $: if (updateAvailable && !initializing && view !== 'meeting') window.location.reload()
 
   function toggleUserMenu() {
     showUserMenu = !showUserMenu
@@ -23,6 +28,27 @@
   function closeUserMenu() {
     showUserMenu = false
   }
+
+  onMount(() => {
+    if (!('serviceWorker' in navigator)) return
+    let controller = navigator.serviceWorker.controller
+    const onControllerChange = () => {
+      const next = navigator.serviceWorker.controller
+      if (controller && next && next !== controller) updateAvailable = true
+      controller = next
+    }
+    const checkForUpdate = () => {
+      if (document.visibilityState === 'visible') {
+        void navigator.serviceWorker.getRegistration().then(registration => registration?.update()).catch(() => {})
+      }
+    }
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange)
+    document.addEventListener('visibilitychange', checkForUpdate)
+    return () => {
+      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
+      document.removeEventListener('visibilitychange', checkForUpdate)
+    }
+  })
 
   onMount(async () => {
     // Check for meeting in URL hash
@@ -78,6 +104,12 @@
 </script>
 
 <main class="min-h-screen bg-[#121212] text-white">
+  {#if updateAvailable && view === 'meeting'}
+    <div role="status" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex w-max max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-3 rounded-lg bg-surface-light px-4 py-3 text-sm shadow-lg">
+      <span>A new version of Meet is ready.</span>
+      <button class="btn-secondary whitespace-nowrap" on:click={() => window.location.reload()}>Reload to update</button>
+    </div>
+  {/if}
   {#if initializing}
     <div class="min-h-screen flex items-center justify-center">
       <div class="text-center">
