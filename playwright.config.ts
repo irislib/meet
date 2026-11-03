@@ -4,6 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
 // Running tests concurrently makes signaling and data-channel timing flaky.
 const appPort = process.env.PW_PORT ?? '49318';
 const relayPort = process.env.PW_RELAY_PORT ?? '49319';
+const fipsPort = process.env.PW_FIPS_PORT ?? '49320';
 const usePreview = process.env.PW_PREVIEW === '1';
 const baseURL = `http://127.0.0.1:${appPort}`;
 
@@ -43,13 +44,21 @@ export default defineConfig({
   ],
   webServer: [
     {
+      command: 'node e2e/fips-server.ts', url: `http://127.0.0.1:${fipsPort}`,
+      reuseExistingServer: false, env: { PW_FIPS_PORT: fipsPort },
+    },
+    {
       command: 'node e2e/relay-server.mjs', url: `http://127.0.0.1:${relayPort}`,
       reuseExistingServer: false, env: { PW_RELAY_PORT: relayPort },
     },
     {
       command: `pnpm run ${usePreview ? 'preview' : 'dev'} --host 127.0.0.1 --port ${appPort} --strictPort`,
       url: baseURL, reuseExistingServer: false,
-      env: { VITE_NOSTR_RELAYS: `ws://127.0.0.1:${relayPort},ws://127.0.0.1:${relayPort}/unresponsive` },
+      env: {
+        VITE_NOSTR_RELAYS: `ws://127.0.0.1:${relayPort},ws://127.0.0.1:${relayPort}/unresponsive`,
+        VITE_FIPS_SEEDS: `ws://127.0.0.1:${Number(fipsPort) + 1}/fips`,
+        VITE_FIPS_STUN_SERVERS: '',
+      },
     },
   ],
 });

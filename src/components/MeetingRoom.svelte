@@ -3,7 +3,7 @@
   import VideoGrid from './VideoGrid.svelte'
   import Controls from './Controls.svelte'
   import Chat from './Chat.svelte'
-  import { joinRoom, leaveRoom, toggleAudio, toggleVideo } from '../lib/webrtc'
+  import { joinRoom, leaveRoom, toggleAudio, toggleVideo, meetingError } from '../lib/meetingSession'
   import { getMeetingLink, type Meeting } from '../lib/meeting'
 
   export let meeting: Meeting
@@ -99,6 +99,12 @@
           </div>
         </div>
       {:else}
+        {#if $meetingError}
+          <div role="alert" class="absolute top-4 left-1/2 -translate-x-1/2 z-30 rounded-lg bg-surface-light px-4 py-3 text-sm text-white shadow-lg">
+            {$meetingError}
+            <button class="ml-3 underline" on:click={() => meetingError.set('')}>Dismiss</button>
+          </div>
+        {/if}
         <VideoGrid />
       {/if}
     </div>

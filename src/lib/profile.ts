@@ -1,5 +1,5 @@
 import { writable, type Readable } from 'svelte/store'
-import { nostr } from './nostr'
+import { getNostrRuntime } from './nostr'
 
 export interface Profile {
   pubkey: string
@@ -107,11 +107,10 @@ async function fetchProfile(pubkey: string): Promise<void> {
   pendingFetches.add(pubkey)
 
   try {
-    const events = await nostr.fetchEvents({ kinds: [0], authors: [pubkey], limit: 1 })
+    const { events } = await getNostrRuntime().query([{ kinds: [0], authors: [pubkey], limit: 1 }], { sources: [], cache: 'cache-first' })
 
-    if (events.size > 0) {
-      const eventsArray = Array.from(events)
-      const event = eventsArray.sort((a, b) => (b.created_at || 0) - (a.created_at || 0))[0]
+    if (events.length > 0) {
+      const event = events.sort((a, b) => b.created_at - a.created_at)[0]
       try {
         const profile = JSON.parse(event.content) as Profile
         profile.pubkey = event.pubkey

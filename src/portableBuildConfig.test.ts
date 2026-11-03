@@ -24,7 +24,7 @@ describe('portable build config', () => {
     const chunker = typeof manualChunks === 'function' ? manualChunks : undefined
 
     expect(chunker).toBeTypeOf('function')
-    expect(chunker?.('/repo/node_modules/ndk/dist/index.js', {} as never)).toBe('vendor')
+    expect(chunker?.('/repo/node_modules/nostr-pubsub/dist/index.js', {} as never)).toBe('vendor')
   })
 
   it('keeps the HTML entrypoint free of root-absolute asset refs', () => {

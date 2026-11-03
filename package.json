@@ -30,17 +30,17 @@
     "@tsconfig/svelte": "^5.0.8",
     "@types/debug": "^4.1.13",
     "@types/node": "^24.13.3",
-    "@unocss/preset-icons": "^66.7.5",
-    "@unocss/preset-uno": "^66.7.5",
-    "@unocss/transformer-directives": "^66.7.5",
-    "svelte": "^5.56.5",
+    "@unocss/preset-icons": "^66.11.0",
+    "@unocss/preset-uno": "^66.11.0",
+    "@unocss/transformer-directives": "^66.11.0",
+    "svelte": "^5.57.2",
     "svelte-check": "^4.7.3",
     "typescript": "~5.9.3",
-    "unocss": "^66.7.5",
-    "vite": "^7.3.6",
+    "unocss": "^66.11.0",
+    "vite": "^7.3.7",
     "vite-plugin-pwa": "^1.3.0",
-    "vitest": "^3.2.7",
-    "ws": "8.18.3",
+    "vitest": "^4.1.12",
+    "ws": "8.22.0",
     "@types/ws": "8.18.1"
   },
   "dependencies": {
@@ -50,17 +50,20 @@
     "minidenticons": "^4.2.1",
     "nostr-tools": "2.23.12",
     "@iris/identity": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.6/iris-identity-0.3.1.tgz",
-    "@iris/hashtree-app": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.6/iris-hashtree-app-0.1.5.tgz",
     "@hashtree/core": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-core-0.3.2.tgz",
     "@hashtree/dexie": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.9/hashtree-dexie-0.1.11.tgz",
     "@hashtree/worker": "https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.11/hashtree-worker-0.4.7.tgz",
     "nostr-pubsub": "https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.13/nostr-pubsub-0.5.13.tgz",
-    "nostr-social-graph": "https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz"
+    "nostr-social-graph": "https://github.com/mmalmi/nostr-social-graph/releases/download/v2.0.1/nostr-social-graph-2.0.1.tgz",
+    "@fips/core": "https://github.com/mmalmi/fips-ts/releases/download/runtime-v0.0.56/fips-core-0.0.52.tgz",
+    "@fips/transport-webrtc": "https://github.com/mmalmi/fips-ts/releases/download/runtime-v0.0.56/fips-transport-webrtc-0.0.55.tgz",
+    "@fips/transport-websocket": "https://github.com/mmalmi/fips-ts/releases/download/runtime-v0.0.56/fips-transport-websocket-0.0.10.tgz"
   },
   "pnpm": {
     "overrides": {
       "nostr-tools": "2.23.12",
       "dexie": "4.4.4",
+      "source-map-js@<1.2.2": "1.2.2",
       "@fips/tcp": "https://github.com/mmalmi/fips-tcp/releases/download/fips-tcp-v0.2.4/fips-tcp-0.2.3.tgz"
     }
   }

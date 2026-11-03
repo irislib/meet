@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import VideoTile from './VideoTile.svelte'
-  import { participants, localMedia, focusedPubkey } from '../lib/webrtc'
+  import { participants, localMedia, focusedPubkey } from '../lib/meetingSession'
   import { identity } from '../lib/identity'
 
   function handleKeydown(e: KeyboardEvent) {

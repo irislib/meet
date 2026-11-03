@@ -1,5 +1,5 @@
 import { createNostrIdentitySignerFromSecretKey, createNostrIdentitySignerFromNip07, type NostrIdentityEventSigner } from '@iris/identity/signers'
-import { nostr } from './nostr'
+import { setNostrSigner } from './nostr'
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
 import { writable, derived } from 'svelte/store'
 import { saveLocalProfile, clearLocalProfile, getLocalProfile } from './profile'
@@ -84,7 +84,7 @@ export async function loginWithPrivkey(privkeyHex: string, displayName: string |
   const signer = createNostrIdentitySignerFromSecretKey(hexToBytes(privkeyHex))
   const pubkey = await signer.getPublicKey()
 
-  nostr.signer = signer
+  setNostrSigner(signer)
 
   identity.set({
     pubkey,
@@ -109,7 +109,7 @@ export async function loginWithNip07(displayName: string | null = null): Promise
   const signer = createNostrIdentitySignerFromNip07(window.nostr)
   const pubkey = await signer.getPublicKey()
 
-  nostr.signer = signer
+  setNostrSigner(signer)
 
   identity.set({
     pubkey,
@@ -160,7 +160,7 @@ export async function autoLogin(displayName: string | null = null): Promise<bool
 }
 
 export function logout(): void {
-  nostr.signer = undefined
+  setNostrSigner(undefined)
   identity.set(null)
   clearStoredIdentity()
   clearLocalProfile()

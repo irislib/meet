@@ -2,7 +2,7 @@
   import { onDestroy, createEventDispatcher } from 'svelte'
   import Avatar from './Avatar.svelte'
   import Name from './Name.svelte'
-  import { localMedia, type ConnectionState } from '../lib/webrtc'
+  import { localMedia, type ConnectionState } from '../lib/meetingSession'
 
   export let stream: MediaStream | null = null
   export let pubkey: string = ''

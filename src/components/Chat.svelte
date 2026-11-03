@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, afterUpdate } from 'svelte'
-  import { chatMessages, sendChatMessage, clearUnreadCount, type ChatMessage } from '../lib/webrtc'
+  import { chatMessages, sendChatMessage, clearUnreadCount, type ChatMessage } from '../lib/meetingSession'
   import { identity } from '../lib/identity'
 
   export let isOpen = false
@@ -24,8 +24,7 @@
 
   function handleSend() {
     if (!messageInput.trim()) return
-    sendChatMessage(messageInput)
-    messageInput = ''
+    if (sendChatMessage(messageInput)) messageInput = ''
   }
 
   function handleKeydown(e: KeyboardEvent) {

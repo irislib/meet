@@ -36,11 +36,11 @@ test.describe('Chat', () => {
 
     // Wait for WebRTC connection and data channels to establish
     await expect.poll(() => page1.evaluate(async () => {
-      const path = '/src/lib/webrtc.ts';
+      const path = '/src/lib/meetingSession.ts';
       const { participants } = await import(path);
       let open = false;
-      participants.subscribe((peers: Map<string, { dataChannel: RTCDataChannel | null }>) => {
-        open = peers.size > 0 && [...peers.values()].every(peer => peer.dataChannel?.readyState === 'open');
+      participants.subscribe((peers: Map<string, { connectionState: string }>) => {
+        open = peers.size > 0 && [...peers.values()].every(peer => peer.connectionState === 'connected');
       })();
       return open;
     })).toBe(true);

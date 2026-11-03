@@ -15,4 +15,13 @@ test('restores existing identity and display name while fully offline', async ({
   await expect(page.getByRole('heading', { name: 'Start a Meeting' })).toBeVisible()
   await expect(page.getByText('Offline attendee')).toBeVisible()
   expect(await page.evaluate(() => localStorage.getItem('iris-meet-identity'))).toBe(before)
+  // The codec is bundled too: local capture must not fetch a codec after reload.
+  await page.getByRole('button', { name: 'Start Meeting' }).click()
+  await expect(page.getByTitle('Leave meeting')).toBeVisible()
+  await page.getByTitle('Unmute microphone').click()
+  await expect(page.getByTitle('Mute microphone', { exact: false })).toBeVisible()
+  await page.getByTitle('Turn on camera').click()
+  await expect(page.getByTitle('Turn off camera')).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await page.getByTitle('Leave meeting').click()
 })

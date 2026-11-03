@@ -4,14 +4,96 @@ import { finalizeEvent, getPublicKey, nip44 } from 'nostr-tools'
 const secret = '15'.repeat(32)
 const pubkey = getPublicKey(Uint8Array.from(secret.match(/../g)!, byte => parseInt(byte, 16)))
 
+test('nostr-pubsub discovers a late participant through FIPS when relays are unavailable', async ({ browser }) => {
+  const contexts = await Promise.all([0, 1, 2].map(() => browser.newContext()))
+  const pages = await Promise.all(contexts.map(context => context.newPage()))
+  const diagnostics: string[] = []
+  pages.forEach((page, index) => {
+    page.on('console', message => { if (['warning', 'error'].includes(message.type())) diagnostics.push(`${index}: ${message.text()}`) })
+    page.on('pageerror', error => diagnostics.push(`${index}: ${error.message}`))
+  })
+  try {
+    for (const [index, context] of contexts.entries()) await context.addInitScript(index => {
+      localStorage.setItem('iris-meet-identity', ['15', '31', '41'][index].repeat(32))
+      const Original = window.WebSocket
+      window.WebSocket = class extends Original {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          const test = window as any
+          const seed = new URL(url).pathname === '/fips'
+          const relay = !seed && protocols !== 'vite-hmr'
+          if ((seed && test.__BLOCK_SEEDS) || (relay && test.__BLOCK_RELAYS)) throw new Error('Disconnected for test')
+          super(url, protocols)
+          if (seed || relay) (test[seed ? '__SEEDS' : '__RELAYS'] ??= []).push(this)
+        }
+      }
+    }, index)
+    const [a, b, c] = pages
+    await a.goto('/')
+    await a.getByRole('button', { name: 'Start Meeting' }).click()
+    await expect(a.getByTitle('Leave meeting')).toBeVisible()
+    await b.goto(a.url())
+    for (const page of [a, b]) await expect.poll(() => page.evaluate(() =>
+      [...(window as any).__DEBUG_PARTICIPANTS.values()].filter((p: any) => p.connectionState === 'connected').length,
+    )).toBe(1)
+    await b.evaluate(async () => {
+      const runtimePath = '/src/lib/nostr.ts', meetingPath = '/src/lib/meetingSession.ts'
+      const runtime = (await import(runtimePath)).getNostrRuntime()
+      const room = (await import(meetingPath)).getMeetingPubkey()
+      ;(window as any).__FIPS_EVENTS = []
+      runtime.subscribe([{ kinds: [25050], authors: [room] }], {
+        onEvent: (event: any, info: any) => (window as any).__FIPS_EVENTS.push({ id: event.id, source: info.source }),
+      }, { cache: 'network-only', relays: [], sources: ['fips'], localEcho: false })
+      ;(window as any).__BLOCK_RELAYS = true
+      for (const socket of (window as any).__RELAYS) socket.close()
+    })
+    await c.goto(a.url())
+    for (const page of [a, b, c]) await expect.poll(() => page.evaluate(() =>
+      [...(window as any).__DEBUG_PARTICIPANTS.values()].filter((p: any) => p.connectionState === 'connected').length,
+    )).toBe(2)
+    expect(await b.evaluate(() => (window as any).__FIPS_EVENTS.some((event: any) => event.source === 'fips'))).toBe(true)
+    expect(await b.evaluate(async () => {
+      const path = '/src/lib/nostr.ts'
+      const ids = (window as any).__FIPS_EVENTS.map((event: any) => event.id)
+      return (await (await import(path)).getNostrRuntime().query([{ ids }], { cache: 'cache-only' })).events
+    })).toEqual([])
+    for (const page of [a, b, c]) {
+      await page.evaluate(() => {
+        ;(window as any).__BLOCK_RELAYS = true
+        for (const socket of (window as any).__RELAYS) socket.close()
+      })
+      await page.getByTitle('Open chat').click()
+    }
+    await c.getByPlaceholder('Type a message...').fill('Joined through nostr-pubsub over FIPS')
+    await c.getByPlaceholder('Type a message...').press('Enter')
+    for (const page of [a, b]) await expect(page.getByText('Joined through nostr-pubsub over FIPS', { exact: true })).toBeVisible()
+    await b.getByTitle('Leave meeting').click()
+    for (const page of [a, c]) await expect(page.getByTestId('video-tile')).toHaveCount(2)
+  } catch (error) {
+    console.log('Discovery errors', diagnostics.slice(-30))
+    for (const [index, page] of pages.entries()) {
+      console.log('Discovery state', index, await page.evaluate(() => {
+        return {
+          participants: [...(window as any).__DEBUG_PARTICIPANTS.values()],
+          events: (window as any).__FIPS_EVENTS,
+        }
+      }))
+      await page.screenshot({ path: `work/fips-migration/security-discovery-failure-${index}.png` })
+    }
+    throw error
+  } finally { await Promise.all(contexts.map(context => context.close())) }
+})
+
 test('restores the existing secret key and persists verified public profiles across reload', async ({ page }) => {
   await page.addInitScript(secret => localStorage.setItem('iris-meet-identity', secret), secret)
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Start a Meeting' })).toBeVisible()
   const eventId = await page.evaluate(async () => {
-    const path = '/src/lib/nostr.ts'
-    const { nostr } = await import(path)
-    return (await nostr.publishEvent({ kind: 0, content: JSON.stringify({ name: 'Stored public profile' }) })).id
+    const path = '/src/lib/nostr.ts', identityPath = '/src/lib/identity.ts'
+    let current: any
+    ;(await import(identityPath)).identity.subscribe((value: any) => { current = value })()
+    const event = await current.signer.signEvent({ kind: 0, created_at: Math.floor(Date.now() / 1000), tags: [], content: JSON.stringify({ name: 'Stored public profile' }) })
+    await (await import(path)).getNostrRuntime().publish(event, { sources: [] })
+    return event.id
   })
   await page.reload()
   const cached = await page.evaluate(async id => {
@@ -35,10 +117,13 @@ test('never stores or queues encrypted meeting signals when offline', async ({ p
   })
   await context.setOffline(true)
   const stored = await page.evaluate(async () => {
-    const runtimePath = '/src/lib/nostr.ts'
-    const { nostr, getNostrRuntime } = await import(runtimePath)
-    const signed = await nostr.signEvent({ kind: 25050, content: 'encrypted-call-setup' })
-    const receipt = await nostr.publish(signed)
+    const runtimePath = '/src/lib/nostr.ts', identityPath = '/src/lib/identity.ts', discoveryPath = '/src/lib/meetingDiscovery.ts'
+    const { getNostrRuntime } = await import(runtimePath)
+    const { PRESENCE_PUBLISH_OPTIONS } = await import(discoveryPath)
+    let current: any
+    ;(await import(identityPath)).identity.subscribe((value: any) => { current = value })()
+    const signed = await current.signer.signEvent({ kind: 25050, created_at: Math.floor(Date.now() / 1000), tags: [], content: 'encrypted-call-setup' })
+    const receipt = await getNostrRuntime().publish(signed, PRESENCE_PUBLISH_OPTIONS)
     const history = await getNostrRuntime().query([{ ids: [signed.id] }], { cache: 'cache-only' })
     return { receipt, events: history.events }
   })
@@ -74,8 +159,11 @@ test('restores extension sessions and delegates signing and NIP44 encryption', a
     const encryptionPath = '/src/lib/encryption.ts'
     const { encryptForPeer, decryptFromPeer } = await import(encryptionPath)
     const encrypted = await encryptForPeer({ message: 'encrypted via extension' }, pubkey)
-    const runtimePath = '/src/lib/nostr.ts'
-    await (await import(runtimePath)).nostr.publishEvent({ kind: 0, content: '{"name":"Extension user"}' })
+    const runtimePath = '/src/lib/nostr.ts', identityPath = '/src/lib/identity.ts'
+    let current: any
+    ;(await import(identityPath)).identity.subscribe((value: any) => { current = value })()
+    const event = await current.signer.signEvent({ kind: 0, created_at: Math.floor(Date.now() / 1000), tags: [], content: '{"name":"Extension user"}' })
+    await (await import(runtimePath)).getNostrRuntime().publish(event, { sources: [] })
     return decryptFromPeer(encrypted, pubkey)
   }, pubkey)).toEqual({ message: 'encrypted via extension' })
   expect(signatures).toBe(1)
