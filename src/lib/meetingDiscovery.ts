@@ -39,7 +39,7 @@ export function startMeetingDiscovery(options: {
   let closed = false, ready = false
   const client = new FipsNostrPubsubClient({
     node: discoveryEndpoint(options.node), localPeerId: options.localPeerId,
-    peers: () => closed ? [] : options.peers(),
+    peers: options.peers,
     allowedKinds: [MEETING_PRESENCE_KIND],
     limits: { maxCachedEvents: 256, maxReplayEvents: 256 },
   }).start()

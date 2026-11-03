@@ -244,7 +244,7 @@ export async function joinRoom(secret: string) {
     const revisions = new Map<string, number>()
     room.discovery = startMeetingDiscovery({
       runtime, node, localPeerId: canonicalPeer(peer), roomPubkey: encryption.roomPubkey, since: joinedAt,
-      peers: () => run === generation ? [...get(participants).values()].map(p => p.fipsPeer) : [],
+      peers: () => transport.peerIds(),
       onReady: () => { void sendPresence().catch(() => {}) },
       onEvent: async event => {
         if (run !== generation || event.created_at < joinedAt) return
@@ -285,10 +285,12 @@ export async function leaveRoom() {
   }
   stopLocalStream(); participants.set(new Map()); chatMessages.set([]); unreadCount.set(0); focusedPubkey.set(null); meetingError.set('')
   if (room) {
-    const discoveryClosed = room.discovery?.close()
-    await room.transport.close()
-    await room.node.stop()
-    await discoveryClosed
+    // The adapter sends its final subscription frames to admitted room peers.
+    try { await room.discovery?.close() }
+    finally {
+      try { await room.transport.close() }
+      finally { await room.node.stop() }
+    }
   }
 }
 export function getMeetingPubkey() { return active?.roomPubkey ?? null }

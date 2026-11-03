@@ -69,6 +69,7 @@ export class MeetingTransport {
     for (const item of this.pending.values()) item.waiting.delete(peer)
     this.updateBitrate()
   }
+  peerIds() { return [...this.peers.keys()] }
   hasPeer(address: string) { return this.peers.has(canonicalPeer(address)) }
   setState(state: MediaState) {
     if ((state.videoEnabled || state.screenSharing) && !this.sendingVideo()) {
