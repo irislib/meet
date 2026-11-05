@@ -42,8 +42,8 @@ const releases = {
     "integrity": "sha512-1Cwdk2LR4oCtxiOR1t5+KmdrzDUKrqZfbIZzpXrOR0g+Ex3DCZ33him/qPWU/iYTChPl9eUgi1ZdhL0KdQWZWQ=="
   },
   "nostr-social-graph": {
-    "url": "https://github.com/mmalmi/nostr-social-graph/releases/download/v4.0.0/nostr-social-graph-4.0.0.tgz",
-    "integrity": "sha512-Y40HbUfRFxvVCArLTkwFJ13NMJAiww3jEwKeVjHar/hCKfZGbptghb/kX9nW0zgT307kiNm7LFrYBTRQEQ78RQ=="
+    "url": "https://github.com/mmalmi/nostr-social-graph/releases/download/v4.0.1/nostr-social-graph-4.0.1.tgz",
+    "integrity": "sha512-bWuIDlRErq+Tl0zK4uOc7znwCbvc92H4ltSHGSvJ2hEcVHa36DwSXxfv8+KhVpOWOcHB/25Iepvt9esAiAxz5A=="
   }
 }
 
