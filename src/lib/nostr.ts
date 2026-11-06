@@ -2,11 +2,11 @@ import { DexieStore } from '@hashtree/dexie'
 import { createWorkerEventStore } from '@hashtree/worker/event-store'
 import type { NostrIdentityEventSigner } from '@iris/identity/signers'
 import { createNostrRuntime, type NostrRuntime } from 'nostr-pubsub'
+import { resolveRelayPolicy } from './relayPolicy'
 
-export const DEFAULT_RELAYS: string[] = import.meta.env.VITE_NOSTR_RELAYS?.split(',').filter(Boolean) ?? [
-  'wss://temp.iris.to', 'wss://relay.damus.io', 'wss://relay.snort.social',
-  'wss://relay.nostr.band', 'wss://relay.primal.net', 'wss://nos.lol',
-]
+const relayPolicy = resolveRelayPolicy(import.meta.env.VITE_NOSTR_RELAYS)
+export const DEFAULT_RELAYS = relayPolicy.meeting
+export const PUBLIC_PROFILE_RELAYS = relayPolicy.publicProfiles
 let runtime: NostrRuntime | undefined
 let signer: NostrIdentityEventSigner | undefined
 
