@@ -49,7 +49,7 @@ describe('portable build config', () => {
   })
 
   it('links the footer source button to the published git.iris.to repo', () => {
-    expect(appSourceForTest()).toContain('https://git.iris.to/#/npub1xdhnr9mrv47kkrn95k6cwecearydeh8e895990n3acntwvmgk2dsdeeycm/meet')
+    expect(appSourceForTest()).toContain('https://git.iris.to/#/npub1xdhnr9mrv47kkrn95k6cwecearydeh8e895990n3acntwvmgk2dsdeeycm/iris-meet')
     expect(appSourceForTest()).not.toContain('https://github.com/irislib/meet')
   })
 })

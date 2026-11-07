@@ -4,7 +4,7 @@ Simple, private video meetings. No account required.
 
 **Live at [meet.iris.to](https://meet.iris.to)**
 
-Source: <https://git.iris.to/#/npub1xdhnr9mrv47kkrn95k6cwecearydeh8e895990n3acntwvmgk2dsdeeycm/meet>
+Source: <https://git.iris.to/#/npub1xdhnr9mrv47kkrn95k6cwecearydeh8e895990n3acntwvmgk2dsdeeycm/iris-meet>
 
 ## Features
 

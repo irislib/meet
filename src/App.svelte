@@ -185,7 +185,7 @@
       <!-- Footer -->
       <footer class="py-4 text-center">
         <a
-          href="https://git.iris.to/#/npub1xdhnr9mrv47kkrn95k6cwecearydeh8e895990n3acntwvmgk2dsdeeycm/meet"
+          href="https://git.iris.to/#/npub1xdhnr9mrv47kkrn95k6cwecearydeh8e895990n3acntwvmgk2dsdeeycm/iris-meet"
           target="_blank"
           rel="noopener noreferrer"
           class="text-sm text-gray-500 hover:text-gray-400"
