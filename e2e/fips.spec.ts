@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { createHash, randomUUID } from 'node:crypto'
 
 async function connected(page: Page, count: number) {
   await expect.poll(() => page.evaluate(() => [...((window as any).__DEBUG_PARTICIPANTS?.values() ?? [])]
@@ -11,6 +12,8 @@ async function mediaStats(page: Page) {
 for (const mode of ['direct', 'incoming-only', 'routed', 'adaptive']) test(`FIPS ${mode} group media, chat and leave`, async ({ browser }) => {
   // Adaptation deliberately waits for five healthy seconds before probing upward.
   if (mode === 'adaptive') test.setTimeout(60000)
+  // Added recovery phases use the existing expectation deadlines throughout.
+  if (mode === 'direct') test.setTimeout(150000)
   const routed = mode === 'routed'
   const contexts = await Promise.all([0, 1, 2].map(() => browser.newContext({ permissions: ['camera', 'microphone'] })))
   try {
@@ -81,6 +84,68 @@ for (const mode of ['direct', 'incoming-only', 'routed', 'adaptive']) test(`FIPS
     await c.getByRole('button', { name: 'Join Meeting', exact: true }).click()
     for (const page of [a, b, c]) await connected(page, 2)
     await expect.poll(async () => (await mediaStats(c)).some((s: any) => s.video > 2 && s.audio > 5)).toBe(true)
+    if (mode === 'direct') {
+      const original = await c.evaluate(() => [...(window as any).__DEBUG_PARTICIPANTS.values()]
+        .map((participant: any) => ({
+          account: participant.pubkey, session: participant.fipsPeer, name: participant.displayName,
+        }))) as Array<{ account: string; session: string; name: string }>
+      // Meet deliberately rotates FIPS session keys on every join. Preserve
+      // account identity and replace the old session; never persist a session key.
+      for (const [endpoint, sender, receiver, name] of [[0, a, b, 'Alice'], [1, b, a, 'Bob']] as const) {
+        // Restore the existing local seed only for bootstrap; fresh delivery
+        // below runs after all seed sockets are disabled again.
+        for (const page of [a, b, c]) await page.evaluate(() => { (window as any).__BLOCK_FIPS_SEEDS = false })
+        const previous = original.find(participant => participant.name === name)!
+        expect(previous.account).toMatch(/^[0-9a-f]{64}$/)
+        expect(previous.session).toMatch(/^(02|03)[0-9a-f]{64}$/)
+        await sender.reload()
+        await expect(sender.getByTitle('Leave meeting')).toBeVisible()
+        await Promise.all([a, b, c].map(page => connected(page, 2)))
+        await expect.poll(() => c.evaluate(({ account, oldSession }) => {
+          const roster = [...(window as any).__DEBUG_PARTICIPANTS.values()] as any[]
+          const matches = roster.filter(participant => participant.pubkey === account)
+          return {
+            accounts: matches.length,
+            connected: matches[0]?.connectionState === 'connected',
+            rotated: typeof matches[0]?.fipsPeer === 'string' && matches[0].fipsPeer !== oldSession,
+            oldSessionRemoved: !roster.some(participant => participant.fipsPeer === oldSession),
+          }
+        }, { account: previous.account, oldSession: previous.session })).toEqual({
+          accounts: 1, connected: true, rotated: true, oldSessionRemoved: true,
+        })
+        await Promise.all([a, b, c].map(page => expect.poll(() => page.evaluate(oldSession =>
+          [...(window as any).__DEBUG_PARTICIPANTS.values()]
+            .some((participant: any) => participant.fipsPeer === oldSession), previous.session)
+        ).toBe(false)))
+        // Recovery must reach direct data channels before the routing seed is
+        // disconnected again. The fresh message then has no routed fallback.
+        await Promise.all([a, b, c].map(page => expect.poll(() => page.evaluate(() =>
+          ((window as any).__TEST_CONNECTIONS ?? []).filter((pc: RTCPeerConnection) =>
+            pc.connectionState === 'connected' && pc.getSenders().length === 0).length
+        )).toBe(2)))
+        for (const page of [a, b, c]) await page.evaluate(() => {
+          ;(window as any).__BLOCK_FIPS_SEEDS = true
+          for (const socket of (window as any).__TEST_FIPS_SOCKETS ?? []) socket.close()
+        })
+        for (const page of [sender, receiver]) {
+          if (!await page.getByPlaceholder('Type a message...').isVisible()) {
+            await page.getByTitle('Open chat').click()
+          }
+        }
+        const nonce = `recovered-${randomUUID()}`
+        await expect(receiver.getByText(nonce, { exact: true })).toHaveCount(0)
+        await sender.getByPlaceholder('Type a message...').fill(nonce)
+        await sender.getByPlaceholder('Type a message...').press('Enter')
+        await expect(receiver.getByText(nonce, { exact: true })).toBeVisible()
+        for (const page of [sender, receiver]) await page.getByTitle('Close chat').click()
+        console.log('PEER_RELOAD_RECOVERY', JSON.stringify({
+          app: 'iris-meet', endpoint, reloaded: true, accountIdentityPreserved: true,
+          sessionIdentityRotated: true, oldSessionRemoved: true, peerRecovered: true,
+          freshHash: createHash('sha256').update(nonce).digest('hex'),
+          bytes: Buffer.byteLength(nonce), transport: 'direct-fips',
+        }))
+      }
+    }
     if (!routed) {
       for (const page of [a, b, c]) await expect.poll(() => page.evaluate(() => ((window as any).__TEST_CONNECTIONS ?? [])
         .filter((pc: RTCPeerConnection) => pc.connectionState === 'connected' && pc.getSenders().length === 0).length)).toBe(2)
