@@ -1,3 +1,4 @@
+import { requestBrowserSigner, restoreBrowserSigner, isBrowserSignerSession, type BrowserSignerSession } from '@iris/identity/browserSigner'
 import { createNostrIdentitySignerFromSecretKey, createNostrIdentitySignerFromNip07, type NostrIdentityEventSigner } from '@iris/identity/signers'
 import { setNostrSigner } from './nostr'
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
@@ -101,6 +102,21 @@ export async function loginWithPrivkey(privkeyHex: string, displayName: string |
   saveIdentity(privkeyHex)
 }
 
+function activateRemoteSigner(session: BrowserSignerSession, displayName: string | null): void {
+  const signer = restoreBrowserSigner(session)
+  setNostrSigner(signer)
+  identity.set({ pubkey: session.pubkey, signer, displayName, isNip07: false })
+  if (displayName) saveLocalProfile(session.pubkey, displayName)
+}
+
+export async function loginWithRemoteSigner(displayName: string | null): Promise<boolean> {
+  const session = await requestBrowserSigner({ name: 'Iris Meet', permissions: 'sign_event,nip44_encrypt,nip44_decrypt' })
+  if (!session) return false
+  activateRemoteSigner(session, displayName)
+  saveIdentity(JSON.stringify(session))
+  return true
+}
+
 export async function loginWithNip07(displayName: string | null = null): Promise<void> {
   if (!window.nostr) {
     throw new Error('No NIP-07 extension found')
@@ -133,6 +149,17 @@ export async function autoLogin(displayName: string | null = null): Promise<bool
       displayName = localProfile?.display_name || localProfile?.name || null
     }
 
+    if (storedValue.startsWith('{')) {
+      try {
+        const session: unknown = JSON.parse(storedValue)
+        if (isBrowserSignerSession(session)) {
+          activateRemoteSigner(session, displayName)
+          return true
+        }
+      } catch { /* Reopen account selection when the stored session is invalid. */ }
+      clearStoredIdentity()
+      return false
+    }
     if (storedValue === 'nip07') {
       // Try to re-authenticate with NIP-07 extension
       if (hasNip07()) {

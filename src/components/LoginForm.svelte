@@ -1,11 +1,12 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte'
-  import { hasNip07, loginWithNip07, loginWithPrivkey, generateNewIdentity } from '../lib/identity'
+  import { hasNip07, loginWithRemoteSigner, loginWithNip07, loginWithPrivkey, generateNewIdentity } from '../lib/identity'
   import { isInMeeting } from '../lib/meeting'
 
   const dispatch = createEventDispatcher()
 
   let displayName = ''
+  let existing = false
   let loading = false
   let error = ''
   let inputEl: HTMLInputElement
@@ -29,6 +30,18 @@
       dispatch('login')
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to login with extension'
+    } finally {
+      loading = false
+    }
+  }
+
+  async function handleRemoteLogin() {
+    loading = true
+    error = ''
+    try {
+      if (await loginWithRemoteSigner(displayName || null)) dispatch('login')
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Could not sign in with your signer'
     } finally {
       loading = false
     }
@@ -64,7 +77,7 @@
         placeholder="Name"
         class="input-field"
         disabled={loading}
-        on:keydown={(e) => e.key === 'Enter' && handleGenerateIdentity()}
+        on:keydown={(e) => e.key === 'Enter' && !existing && handleGenerateIdentity()}
       />
     </div>
 
@@ -76,33 +89,17 @@
 
     <!-- Login options -->
     <div class="space-y-3 pt-2">
-      {#if supportsNip07}
-        <button
-          class="btn-primary w-full flex items-center justify-center gap-2"
-          on:click={handleNip07Login}
-          disabled={loading}
-        >
-          <span class="i-carbon-wallet"></span>
-          Login with Extension
-        </button>
-
-        <button
-          class="btn-secondary w-full flex items-center justify-center gap-2"
-          on:click={handleGenerateIdentity}
-          disabled={loading}
-        >
-          <span class="i-carbon-user-avatar"></span>
-          Join Anonymously
-        </button>
+      {#if existing}
+        <button class="btn-primary w-full" on:click={handleRemoteLogin} disabled={loading}>Sign in with remote signer</button>
+        {#if supportsNip07}
+          <button class="btn-secondary w-full" on:click={handleNip07Login} disabled={loading}>Login with Extension</button>
+        {/if}
+        <button class="btn-ghost w-full" on:click={() => existing = false} disabled={loading}>Back</button>
       {:else}
-        <button
-          class="btn-primary w-full flex items-center justify-center gap-2"
-          on:click={handleGenerateIdentity}
-          disabled={loading}
-        >
-          <span class="i-carbon-arrow-right"></span>
+        <button class="btn-primary w-full" on:click={handleGenerateIdentity} disabled={loading}>
           {hasMeetingInUrl ? 'Join Meeting' : 'Join'}
         </button>
+        <button class="btn-secondary w-full" on:click={() => existing = true} disabled={loading}>Already have an account?</button>
       {/if}
     </div>
   </div>
