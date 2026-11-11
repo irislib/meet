@@ -101,13 +101,21 @@ function notifyListeners(pubkey: string, profile: Profile) {
   }
 }
 
-async function fetchProfile(pubkey: string): Promise<void> {
+/**
+ * A lookup that ran out of time is not an answer: the profile may arrive just
+ * after it, when it is only stored. While somebody is still showing this person,
+ * ask again a few times, further apart each time.
+ */
+const PROFILE_RETRY_DELAYS_MS = [5000, 15000, 45000]
+
+async function fetchProfile(pubkey: string, attempt = 0): Promise<void> {
   if (pendingFetches.has(pubkey)) return
 
   pendingFetches.add(pubkey)
+  let unanswered = false
 
   try {
-    const { events } = await getNostrRuntime().query([{ kinds: [0], authors: [pubkey], limit: 1 }], { relays: PUBLIC_PROFILE_RELAYS, sources: [], cache: 'cache-first' })
+    const { events, complete } = await getNostrRuntime().query([{ kinds: [0], authors: [pubkey], limit: 1 }], { relays: PUBLIC_PROFILE_RELAYS, sources: [], cache: 'cache-first' })
 
     if (events.length > 0) {
       const event = events.sort((a, b) => b.created_at - a.created_at)[0]
@@ -119,11 +127,21 @@ async function fetchProfile(pubkey: string): Promise<void> {
       } catch (e) {
         console.error('[profile] JSON parse error', e)
       }
+    } else {
+      unanswered = !complete
     }
   } catch (e) {
     console.error('[profile] fetch error', e)
+    unanswered = true
   } finally {
     pendingFetches.delete(pubkey)
+  }
+
+  const retryDelay = PROFILE_RETRY_DELAYS_MS[attempt]
+  if (unanswered && retryDelay !== undefined) {
+    setTimeout(() => {
+      if (listeners.has(pubkey) && !profileCache.has(pubkey)) void fetchProfile(pubkey, attempt + 1)
+    }, retryDelay)
   }
 }
 
