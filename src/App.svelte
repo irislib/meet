@@ -120,8 +120,8 @@
   {:else if view === 'login'}
     <div class="min-h-screen flex flex-col items-center justify-center p-4">
       <div class="mb-8 text-center flex flex-col items-center select-none">
-        <img src={meetIconUrl} alt="Iris Meet" class="w-16 h-16 mb-4" draggable="false" />
-        <h1 class="text-4xl font-semibold">Meet</h1>
+        <img src={meetIconUrl} alt="Iris Meet" class="w-16 h-16 mb-4 shrink-0" draggable="false" />
+        <h1 class="text-4xl font-semibold leading-none">Meet</h1>
       </div>
       <LoginForm on:login={handleLogin} />
     </div>
@@ -130,13 +130,13 @@
       <!-- Header -->
       <header class="h-16 px-4 flex items-center justify-between border-b border-surface-lighter">
         <button
-          class="flex items-center gap-2 select-none bg-transparent border-none p-0 cursor-pointer hover:opacity-80 transition-opacity"
+          class="inline-flex items-center gap-2 select-none bg-transparent border-none p-0 cursor-pointer hover:opacity-80 transition-opacity"
           type="button"
           on:click={handleHomeClick}
           aria-label="Go to home"
         >
-          <img src={meetIconUrl} alt="Iris Meet" class="w-8 h-8" draggable="false" />
-          <h1 class="text-xl font-semibold">Meet</h1>
+          <img src={meetIconUrl} alt="Iris Meet" class="w-8 h-8 shrink-0" draggable="false" />
+          <h1 class="text-xl font-semibold leading-none">Meet</h1>
         </button>
         <div class="relative">
           <button

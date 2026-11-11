@@ -1,5 +1,11 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte'
+  import {
+    clearCopyReset,
+    copyToClipboard,
+    scheduleCopyReset,
+    type CopyResetTimer,
+  } from '@iris/svelte-ui/clipboard'
   import VideoGrid from './VideoGrid.svelte'
   import Controls from './Controls.svelte'
   import Chat from './Chat.svelte'
@@ -13,6 +19,7 @@
   let error = ''
   let joining = true
   let copied = false
+  let copiedResetTimer: CopyResetTimer = null
   let chatOpen = false
 
   function handleKeydown(e: KeyboardEvent) {
@@ -46,6 +53,7 @@
 
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown)
+    clearCopyReset(copiedResetTimer)
     leaveRoom()
   })
 
@@ -56,21 +64,13 @@
 
   async function handleCopyLink() {
     const link = getMeetingLink(meeting)
-    try {
-      await navigator.clipboard.writeText(link)
-      copied = true
-      setTimeout(() => copied = false, 2000)
-    } catch {
-      // Fallback
-      const input = document.createElement('input')
-      input.value = link
-      document.body.appendChild(input)
-      input.select()
-      document.execCommand('copy')
-      document.body.removeChild(input)
-      copied = true
-      setTimeout(() => copied = false, 2000)
-    }
+    const result = await copyToClipboard(link, { legacyCommand: true })
+    if (result !== 'copied') return
+    copied = true
+    copiedResetTimer = scheduleCopyReset(copiedResetTimer, () => {
+      copied = false
+      copiedResetTimer = null
+    })
   }
 </script>
 

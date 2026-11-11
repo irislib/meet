@@ -218,7 +218,7 @@
         class:bg-surface-light={!copied}
         class:hover:bg-surface-lighter={!copied}
         on:click={handleCopyLink}
-        title={copied ? 'Copied!' : 'Copy meeting link'}
+        title={copied ? 'Copied' : 'Copy meeting link'}
       >
         {#if copied}
           <span class="i-carbon-checkmark text-xl text-white"></span>

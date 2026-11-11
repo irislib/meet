@@ -85,7 +85,8 @@
           muted={false}
           mirrored={false}
           audioEnabled={focusedParticipant.audioEnabled}
-          videoEnabled={focusedParticipant.videoEnabled}
+          videoEnabled={focusedParticipant.videoEnabled || focusedParticipant.screenSharing}
+          isScreenShare={focusedParticipant.screenSharing}
           connectionState={focusedParticipant.connectionState}
           isLocal={false}
           on:click={() => handleTileClick(focusedParticipant.pubkey)}
@@ -116,7 +117,8 @@
             muted={false}
             mirrored={false}
             audioEnabled={participant.audioEnabled}
-            videoEnabled={participant.videoEnabled}
+            videoEnabled={participant.videoEnabled || participant.screenSharing}
+            isScreenShare={participant.screenSharing}
             connectionState={participant.connectionState}
             isLocal={false}
             on:click={() => handleTileClick(participant.pubkey)}
@@ -152,7 +154,8 @@
         muted={false}
         mirrored={false}
         audioEnabled={participant.audioEnabled}
-        videoEnabled={participant.videoEnabled}
+        videoEnabled={participant.videoEnabled || participant.screenSharing}
+            isScreenShare={participant.screenSharing}
         connectionState={participant.connectionState}
         isLocal={false}
         on:click={() => handleTileClick(participant.pubkey)}

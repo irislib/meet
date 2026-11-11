@@ -1,7 +1,7 @@
 <script lang="ts">
   import SharedName from '@iris/svelte-ui/Name.svelte'
+  import { coolName } from '@iris/svelte-ui/profile'
   import { createProfileStore, getProfileName, type Profile } from '../lib/profile'
-  import { getAnimalName } from '../lib/animalNames'
 
   export let pubkey: string
 
@@ -10,14 +10,14 @@
   $: profileStore = pubkey ? createProfileStore(pubkey) : null
   $: profile = profileStore ? ($profileStore ?? undefined) : undefined
   $: profileName = getProfileName(profile)
-  $: animalName = getAnimalName(pubkey)
+  $: fallbackName = coolName(pubkey)
 </script>
 
 <SharedName
   {pubkey}
   {profile}
   name={profileName}
-  fallbackName={animalName}
+  {fallbackName}
   class="truncate"
   fallbackClass="italic opacity-70"
 />

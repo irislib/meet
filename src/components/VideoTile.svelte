@@ -53,18 +53,20 @@
   role="button"
   tabindex="0"
 >
-  {#if stream && videoEnabled}
+{#if stream}
     <video
       bind:this={videoElement}
       autoplay
       playsinline
       {muted}
       class="w-full h-full"
+      class:hidden={!videoEnabled && !isScreenShare}
       class:object-cover={!isScreenShare}
       class:object-contain={isScreenShare}
       class:scale-x-[-1]={mirrored}
     ></video>
-  {:else}
+  {/if}
+  {#if !stream || (!videoEnabled && !isScreenShare)}
     <div class="w-full h-full flex items-center justify-center bg-surface">
       <Avatar {pubkey} size={80} />
     </div>

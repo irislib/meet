@@ -1,7 +1,7 @@
 <script lang="ts">
   import SharedAvatar from '@iris/svelte-ui/Avatar.svelte'
+  import { coolName } from '@iris/svelte-ui/profile'
   import { createProfileStore, getProfileName, type Profile } from '../lib/profile'
-  import { getAnimalName } from '../lib/animalNames'
 
   export let pubkey: string
   export let size: number = 32
@@ -10,7 +10,7 @@
 
   $: profileStore = pubkey ? createProfileStore(pubkey) : null
   $: profile = profileStore ? ($profileStore ?? undefined) : undefined
-  $: name = getProfileName(profile) || getAnimalName(pubkey)
+  $: name = getProfileName(profile) || coolName(pubkey)
 </script>
 
 <SharedAvatar
