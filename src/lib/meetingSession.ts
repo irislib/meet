@@ -205,7 +205,11 @@ export async function joinRoom(secret: string) {
       if (run !== generation) return
       updateParticipant(peer, p => { p.connectionState = 'connected' })
       media.requestKeyframe()
-      // FIPS deduplicates dials, negotiates the direct link and chooses the route.
+    },
+    heartbeat(peer) {
+      if (run !== generation) return
+      // A routed heartbeat can arrive before the far end admits a direct dial.
+      // FIPS coalesces pending dials and recognizes established links.
       void node.connect({ transport: 'webrtc', addr: peer }).catch(() => {})
     },
     failed(peer) { if (run === generation) updateParticipant(peer, p => { p.connectionState = 'failed' }) },
