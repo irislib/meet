@@ -14,6 +14,7 @@
   let view: View = 'login'
   let initializing = true
   let updateAvailable = false
+  let logoutDialog: HTMLDialogElement
   let showUserMenu = false
   const meetIconUrl = `${import.meta.env.BASE_URL}iris-meet-icon.svg`
 
@@ -97,6 +98,8 @@
   }
 
   function handleLogout() {
+    logoutDialog.close()
+    closeUserMenu()
     logout()
     leaveMeeting()
     view = 'login'
@@ -154,7 +157,7 @@
             >
               <button
                 class="btn-ghost w-full text-left text-sm flex items-center gap-2"
-                on:click={() => { handleLogout(); closeUserMenu(); }}
+                on:click={() => logoutDialog.showModal()}
               >
                 <span class="i-carbon-logout"></span>
                 Logout
@@ -171,6 +174,15 @@
           on:click={closeUserMenu}
         ></div>
       {/if}
+
+      <dialog bind:this={logoutDialog} aria-labelledby="logout-title" class="m-auto max-w-sm rounded-xl bg-surface p-5 text-white backdrop:bg-black/60">
+        <h2 id="logout-title" class="text-lg font-semibold">Log out?</h2>
+        <p class="mt-2 text-sm text-gray-300">This will sign you out of Meet on this device.</p>
+        <div class="mt-5 flex justify-end gap-2">
+          <button class="btn-secondary" on:click={() => logoutDialog.close()}>Cancel</button>
+          <button class="btn-danger" on:click={handleLogout}>Log out</button>
+        </div>
+      </dialog>
 
       <!-- Main content -->
       <div class="flex-1 flex items-center justify-center p-4">

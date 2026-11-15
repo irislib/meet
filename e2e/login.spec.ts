@@ -76,7 +76,7 @@ test.describe('Login Flow', () => {
     await expect(page.getByText('Persistent User')).toBeVisible();
   });
 
-  test('can logout', async ({ page }) => {
+  test('can cancel logout and then confirm it', async ({ page }, info) => {
     await page.goto('/');
 
     // Login
@@ -86,10 +86,19 @@ test.describe('Login Flow', () => {
     // Click user menu to open dropdown
     await page.locator('.i-carbon-chevron-down').click();
 
-    // Click logout in dropdown
-    await page.getByRole('button', { name: 'Logout' }).click();
-
-    // Should be back at login screen
-    await expect(page.getByRole('heading', { name: 'Meet' })).toBeVisible();
+    const logout = page.getByRole('button', { name: 'Logout', exact: true });
+    await logout.click();
+    const confirmation = page.getByRole('dialog', { name: 'Log out?' });
+    await expect(confirmation).toBeVisible();
+    await page.screenshot({ path: info.outputPath('logout-confirmation.png') });
+    await confirmation.getByRole('button', { name: 'Cancel' }).click();
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Start a Meeting' })).toBeVisible();
+    await page.locator('.i-carbon-chevron-down').click();
+    await logout.click();
+    await confirmation.getByRole('button', { name: 'Log out', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Join', exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Join', exact: true })).toBeVisible();
   });
 });
