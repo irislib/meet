@@ -38,8 +38,8 @@ const releases = {
     "integrity": "sha512-viUPl2JUtrfJENEWZPvaTtT5x73Pvj5EmHn7qjsTP5T01uOg0tDm7xJww3cf6x23LILi6drOh97ss0WWYq/KVA=="
   },
   "nostr-pubsub": {
-    "url": "https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.20/nostr-pubsub-0.5.20.tgz",
-    "integrity": "sha512-1Cwdk2LR4oCtxiOR1t5+KmdrzDUKrqZfbIZzpXrOR0g+Ex3DCZ33him/qPWU/iYTChPl9eUgi1ZdhL0KdQWZWQ=="
+    "url": "https://github.com/mmalmi/nostr-pubsub/releases/download/nostr-pubsub-ts-v0.5.32/nostr-pubsub-0.5.32.tgz",
+    "integrity": "sha512-r4atGsees6cb2XOynyzN8/RzkiHmitRrsek3+J6WQ5zBAC8owa6krzgR0Vd3F7UUf7MRvyVh0to0/+eTmRi8+Q=="
   },
   "nostr-social-graph": {
     "url": "https://github.com/mmalmi/nostr-social-graph/releases/download/v4.1.0/nostr-social-graph-4.1.0.tgz",
