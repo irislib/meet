@@ -99,7 +99,7 @@
         <button class="btn-primary w-full" on:click={handleGenerateIdentity} disabled={loading}>
           {hasMeetingInUrl ? 'Join Meeting' : 'Join'}
         </button>
-        <button class="btn-secondary w-full" on:click={() => existing = true} disabled={loading}>Already have an account?</button>
+        <button class="btn-secondary w-full" on:click={() => existing = true} disabled={loading}>Already have a profile?</button>
       {/if}
     </div>
   </div>

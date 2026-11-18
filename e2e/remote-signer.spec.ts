@@ -4,7 +4,7 @@ test('remote signer belongs to the existing account screen and cancellation retu
   await page.goto('/');
   const signer = page.getByRole('button', { name: 'Sign in with remote signer' });
   await expect(signer).toHaveCount(0);
-  await page.getByRole('button', { name: 'Already have an account?' }).click();
+  await page.getByRole('button', { name: 'Already have a profile?' }).click();
   await signer.click();
   const dialog = page.getByRole('dialog', { name: 'Sign in with remote signer' });
   await expect(dialog.getByLabel('Signer connection link')).toBeVisible();
@@ -45,7 +45,7 @@ test('restored meeting identity signs and encrypts using its paired account', as
     })
   })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Already have an account?' }).click()
+  await page.getByRole('button', { name: 'Already have a profile?' }).click()
   await page.getByRole('button', { name: 'Sign in with remote signer' }).click()
   await page.getByLabel('Signer connection link').fill(`bunker://${getPublicKey(transport)}?relay=wss://signer.test&secret=one-time-token`)
   await page.getByRole('button', { name: 'Connect', exact: true }).click()
@@ -53,7 +53,7 @@ test('restored meeting identity signs and encrypts using its paired account', as
   await expect(home).toBeVisible()
   await page.reload()
   await expect(home).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Already have an account?' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Already have a profile?' })).toHaveCount(0)
   const { signature, clear, saved } = await page.evaluate(async () => {
     // Vite serves the same runtime modules consumed by the meeting session.
     const { identity } = await import('/src/lib/identity.ts')
