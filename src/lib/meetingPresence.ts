@@ -17,6 +17,6 @@ export function readMeetingPresence(value: unknown, room: string, now = Date.now
     if (data.v !== 1 || !peer || typeof data.name !== 'string' || data.name.length > 256 ||
       !Number.isSafeInteger(data.issuedAt) || data.issuedAt <= previousIssuedAt ||
       data.issuedAt > now + 60000 || Math.abs(data.issuedAt / 1000 - event.created_at) > 60) return null
-    return { owner: event.pubkey, peer, name: data.name, issuedAt: data.issuedAt as number }
+    return { owner: event.pubkey, peer, address: data.peer as string, name: data.name, issuedAt: data.issuedAt as number }
   } catch { return null }
 }

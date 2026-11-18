@@ -60,6 +60,9 @@
     "@fips/transport-websocket": "https://github.com/mmalmi/fips-ts/releases/download/runtime-v0.0.62/fips-transport-websocket-0.0.15.tgz"
   },
   "pnpm": {
+    "patchedDependencies": {
+      "nostr-pubsub@0.5.32": "patches/nostr-pubsub-stop.patch"
+    },
     "overrides": {
       "nostr-tools": "2.23.12",
       "dexie": "4.4.4",

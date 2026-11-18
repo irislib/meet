@@ -1,6 +1,6 @@
 // Meeting state and media use one FIPS node. FIPS owns link negotiation and routing.
 import { writable, get } from 'svelte/store'
-import { FipsNode, generateIdentity, toHex } from '@fips/core'
+import { FipsNode, generateIdentity, toHex, type PeerEvent } from '@fips/core'
 import { WebRtcTransport } from '@fips/transport-webrtc'
 import { WebSocketTransport } from '@fips/transport-websocket'
 import { createNostrIdentitySignerFromSecretKey } from '@iris/identity/signers'
@@ -44,7 +44,7 @@ const MEDIA_PREFS_KEY = 'iris-meet-media-prefs'
 const seeds = import.meta.env.VITE_FIPS_SEEDS?.split(',').filter(Boolean) ?? ['wss://fips2.iris.to/fips', 'wss://fips1.iris.to/fips']
 let generation = 0
 let active: {
-  node: FipsNode; transport: MeetingTransport; media: MeetingMedia
+  stopNode: () => Promise<void>; transport: MeetingTransport; media: MeetingMedia
   roomPubkey: string; discovery?: ReturnType<typeof startMeetingDiscovery>; interval?: ReturnType<typeof setInterval>
 } | undefined
 
@@ -193,27 +193,62 @@ export async function joinRoom(secret: string) {
   const issuedAt = Date.now()
   const binding = await current.signer.signEvent({ kind: MEETING_BINDING_KIND, created_at: Math.floor(issuedAt / 1000), tags: [['r', encryption.roomPubkey]], content: JSON.stringify({ v: 1, peer, issuedAt, name: getProfileDisplayName(undefined, current.pubkey, current.displayName) }) })
   if (run !== generation) return
+  const connections = new Set<RTCPeerConnection>()
   const direct = new WebRtcTransport({
+    // A replaced inbound negotiation can outlive the transport's active links.
+    // Keep ownership of each browser connection until it is actually closed.
+    rtcPeerConnection: class extends RTCPeerConnection {
+      constructor(config?: RTCConfiguration) {
+        super(config)
+        connections.add(this)
+      }
+      override close() {
+        connections.delete(this)
+        super.close()
+      }
+    },
     relays: [], advertiseOnNostr: false, acceptConnections: true, autoConnect: false,
     allowIncomingPeer: (peer): boolean => run === generation && transport.hasPeer(peer),
     ordered: false, maxRetransmits: 0,
     ...(import.meta.env.VITE_FIPS_STUN_SERVERS !== undefined ? { stunServers: import.meta.env.VITE_FIPS_STUN_SERVERS.split(',').filter(Boolean) } : {}),
   })
   const node = new FipsNode({ identity: fipsIdentity, transports: [new WebSocketTransport({ seedUrls: seeds }), direct], routingMode: 'reply_learned' })
-  const transport = new MeetingTransport(node, encryption.roomPubkey.slice(0, 32), {
+  async function stopNode() {
+    try { await node.stop() }
+    finally { for (const connection of connections) connection.close() }
+  }
+  const localPeer = canonicalPeer(peer)
+  const directAddresses = new Map<string, { address: string; dialAfter: number }>()
+  const established = new Set<string>()
+  node.on('peer', value => {
+    const event = value as PeerEvent
+    if (event.remoteAddr.transport !== 'webrtc') return
+    const id = canonicalPeer(event.remotePubkey)
+    if (event.state === 'connected') established.add(id)
+    else established.delete(id)
+  })
+  if (import.meta.env.DEV) Object.assign(window, { __DEBUG_DIRECT_PEERS: established })
+  const retireDirect = (peer: string) => {
+    const remote = directAddresses.get(peer)
+    directAddresses.delete(peer)
+    established.delete(peer)
+    if (remote) void direct.close({ transport: 'webrtc', addr: remote.address }).catch(() => {})
+  }
+  const connectDirect = (peer: string) => {
+    const remote = directAddresses.get(peer)
+    if (run === generation && remote && performance.now() >= remote.dialAfter && transport.hasPeer(peer) && !established.has(peer)) {
+      void node.connect({ transport: 'webrtc', addr: remote.address }).catch(() => {})
+    }
+  }
+  const transport: MeetingTransport = new MeetingTransport(node, encryption.roomPubkey.slice(0, 32), {
     connected(peer) {
       if (run !== generation) return
       updateParticipant(peer, p => { p.connectionState = 'connected' })
       media.requestKeyframe()
     },
-    heartbeat(peer) {
-      if (run !== generation) return
-      // A routed heartbeat can arrive before the far end admits a direct dial.
-      // FIPS coalesces pending dials and recognizes established links.
-      void node.connect({ transport: 'webrtc', addr: peer }).catch(() => {})
-    },
+    heartbeat: connectDirect,
     failed(peer) { if (run === generation) updateParticipant(peer, p => { p.connectionState = 'failed' }) },
-    leave(peer) { if (run === generation) removeParticipant(peer) },
+    leave(peer) { if (run === generation) { retireDirect(peer); removeParticipant(peer) } },
     state(peer, state) { if (run === generation) updateParticipant(peer, p => Object.assign(p, state)) },
     message(peer, message) {
       if (run !== generation) return
@@ -232,10 +267,10 @@ export async function joinRoom(secret: string) {
     media = await MeetingMedia.open((frame, allowed) => transport.sendMedia(frame, allowed),
       (peer, stream) => { if (run === generation) updateParticipant(peer, p => { p.stream = stream }) },
       peer => transport.requestKeyframe(peer), report)
-    if (run !== generation) { media.close(); await transport.close(); await node.stop(); return }
-    active = { node, transport, media, roomPubkey: encryption.roomPubkey }
+    if (run !== generation) { media.close(); await transport.close(); await stopNode(); return }
+    active = { stopNode, transport, media, roomPubkey: encryption.roomPubkey }
     await node.start()
-    if (run !== generation) { await node.stop(); return }
+    if (run !== generation) { await stopNode(); return }
     const room = active!
     const runtime = getNostrRuntime()
     const sendPresence = async () => {
@@ -247,7 +282,7 @@ export async function joinRoom(secret: string) {
     const joinedAt = Math.floor(Date.now() / 1000) - 5
     const revisions = new Map<string, number>()
     room.discovery = startMeetingDiscovery({
-      runtime, node, localPeerId: canonicalPeer(peer), roomPubkey: encryption.roomPubkey, since: joinedAt,
+      runtime, node, localPeerId: localPeer, roomPubkey: encryption.roomPubkey, since: joinedAt,
       peers: () => transport.peerIds(),
       onReady: () => { void sendPresence().catch(() => {}) },
       onEvent: async event => {
@@ -261,12 +296,19 @@ export async function joinRoom(secret: string) {
           const existing = get(participants).get(owner)
           if (existing?.fipsPeer === peer) return
           // A refreshed browser has a fresh session key. Replace only this owner's session.
-          if (existing) removeParticipant(existing.fipsPeer)
+          if (existing) {
+            retireDirect(existing.fipsPeer)
+            removeParticipant(existing.fipsPeer)
+          }
           if ([...get(participants).values()].some(p => p.fipsPeer === peer)) return
           revisions.set(owner, data.issuedAt)
           participants.update(map => new Map(map).set(owner, { pubkey: owner, displayName: data.name, fipsPeer: peer, stream: null, audioEnabled: false, videoEnabled: false, screenSharing: false, connectionState: 'connecting' }))
           addProfileToCache({ pubkey: owner, name: data.name, display_name: data.name })
+          // Give one endpoint the first offer. The other can dial on a later
+          // heartbeat if the preferred endpoint can only accept connections.
+          directAddresses.set(peer, { address: data.address, dialAfter: localPeer < peer ? 0 : performance.now() + 1500 })
           transport.addPeer(peer)
+          connectDirect(peer)
           room.discovery?.refreshPeers()
           await media.addPeer(peer)
           if (run === generation) await sendPresence()
@@ -275,7 +317,7 @@ export async function joinRoom(secret: string) {
     })
     room.interval = setInterval(() => { void sendPresence().catch(() => {}) }, 15000)
   } catch (error) {
-    await transport.close(); await node.stop().catch(() => {})
+    await transport.close(); await stopNode().catch(() => {})
     if (run === generation) await leaveRoom()
     throw error
   }
@@ -289,12 +331,9 @@ export async function leaveRoom() {
   }
   stopLocalStream(); participants.set(new Map()); chatMessages.set([]); unreadCount.set(0); focusedPubkey.set(null); meetingError.set('')
   if (room) {
-    // The adapter sends its final subscription frames to admitted room peers.
+    // Final subscription frames can still use the admitted room peers.
     try { await room.discovery?.close() }
-    finally {
-      try { await room.transport.close() }
-      finally { await room.node.stop() }
-    }
+    finally { await room.transport.close().finally(room.stopNode) }
   }
 }
 export function getMeetingPubkey() { return active?.roomPubkey ?? null }

@@ -5,6 +5,31 @@ async function connected(page: Page, count: number) {
   await expect.poll(() => page.evaluate(() => [...((window as any).__DEBUG_PARTICIPANTS?.values() ?? [])]
     .filter((p: any) => p.connectionState === 'connected').length)).toBe(count)
 }
+// Closing the seed is safe once FIPS has authenticated every current WebRTC path.
+async function directRoomReady(page: Page) {
+  await expect.poll(() => page.evaluate(() => {
+    const peers = [...(window as any).__DEBUG_PARTICIPANTS.values()]
+    const established = (window as any).__DEBUG_DIRECT_PEERS as Set<string>
+    return peers.length === 2 && peers.every(p => established.has(p.fipsPeer))
+  })).toBe(true)
+}
+
+async function receivedVideoSource(page: Page) {
+  return page.locator('video').evaluateAll(videos => {
+    const alice = [...(window as any).__DEBUG_PARTICIPANTS.values()].find(p => p.displayName === 'Alice')
+    const video = videos.find(v => v.srcObject === alice?.stream)
+    if (!video?.videoWidth || !video.videoHeight || video.readyState < 2) return null
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 1
+    const ctx = canvas.getContext('2d')!
+    ctx.drawImage(video, 0, 0, 1, 1)
+    const [red, green, blue] = ctx.getImageData(0, 0, 1, 1).data
+    if (red > 170 && blue > 170 && green < 45) return 'screen'
+    // Chromium's fake camera has a green background. A blank or frozen
+    // screen-share frame cannot satisfy camera restoration.
+    return green > 40 && green > red && green > blue ? 'camera' : null
+  })
+}
 async function mediaStats(page: Page) {
   return page.evaluate(() => (window as any).__DEBUG_MEETING_MEDIA ?? [])
 }
@@ -36,8 +61,8 @@ for (const mode of ['direct', 'incoming-only', 'routed', 'adaptive']) test(`FIPS
       window.WebSocket = class extends OriginalSocket {
         constructor(url: string | URL, protocols?: string | string[]) {
           const seed = new URL(url).pathname === '/fips'
-          if (seed && (window as any).__BLOCK_FIPS_SEEDS) throw new Error('Routing servers disconnected')
           super(url, protocols)
+          if (seed && (window as any).__BLOCK_FIPS_SEEDS) this.close()
           if (seed) ((window as any).__TEST_FIPS_SOCKETS ??= []).push(this)
         }
       }
@@ -64,7 +89,7 @@ for (const mode of ['direct', 'incoming-only', 'routed', 'adaptive']) test(`FIPS
         const timer = setInterval(() => {
           const [track] = stream.getVideoTracks()
           if (track.readyState === 'ended') { clearInterval(timer); return }
-          drawing.fillStyle = frame++ % 2 ? 'black' : 'white'
+          drawing.fillStyle = frame++ % 2 ? '#ff00ff' : '#cf00cf'
           drawing.fillRect(0, 0, canvas.width, canvas.height)
         }, 100)
         return stream
@@ -93,6 +118,8 @@ for (const mode of ['direct', 'incoming-only', 'routed', 'adaptive']) test(`FIPS
     for (const page of [a, b, c]) await connected(page, 2)
     await expect.poll(async () => (await mediaStats(c)).some((s: any) => s.video > 2 && s.audio > 5)).toBe(true)
     if (mode === 'direct') {
+      // Establish the original three direct paths before testing their recovery.
+      await Promise.all([a, b, c].map(directRoomReady))
       const original = await c.evaluate(() => [...(window as any).__DEBUG_PARTICIPANTS.values()]
         .map((participant: any) => ({
           account: participant.pubkey, session: participant.fipsPeer, name: participant.displayName,
@@ -103,6 +130,9 @@ for (const mode of ['direct', 'incoming-only', 'routed', 'adaptive']) test(`FIPS
         // Restore the existing local seed only for bootstrap; fresh delivery
         // below runs after all seed sockets are disabled again.
         for (const page of [a, b, c]) await page.evaluate(() => { (window as any).__BLOCK_FIPS_SEEDS = false })
+        await Promise.all([a, b, c].map(page => expect.poll(() => page.evaluate(() =>
+          (window as any).__TEST_FIPS_SOCKETS?.some((socket: WebSocket) => socket.readyState === WebSocket.OPEN)
+        )).toBe(true)))
         const previous = original.find(participant => participant.name === name)!
         expect(previous.account).toMatch(/^[0-9a-f]{64}$/)
         expect(previous.session).toMatch(/^(02|03)[0-9a-f]{64}$/)
@@ -127,10 +157,7 @@ for (const mode of ['direct', 'incoming-only', 'routed', 'adaptive']) test(`FIPS
         ).toBe(false)))
         // Recovery must reach direct data channels before the routing seed is
         // disconnected again. The fresh message then has no routed fallback.
-        await Promise.all([a, b, c].map(page => expect.poll(() => page.evaluate(() =>
-          ((window as any).__TEST_CONNECTIONS ?? []).filter((pc: RTCPeerConnection) =>
-            pc.connectionState === 'connected' && pc.getSenders().length === 0).length
-        )).toBe(2)))
+        await Promise.all([a, b, c].map(directRoomReady))
         for (const page of [a, b, c]) await page.evaluate(() => {
           ;(window as any).__BLOCK_FIPS_SEEDS = true
           for (const socket of (window as any).__TEST_FIPS_SOCKETS ?? []) socket.close()
@@ -155,8 +182,7 @@ for (const mode of ['direct', 'incoming-only', 'routed', 'adaptive']) test(`FIPS
       }
     }
     if (!routed) {
-      for (const page of [a, b, c]) await expect.poll(() => page.evaluate(() => ((window as any).__TEST_CONNECTIONS ?? [])
-        .filter((pc: RTCPeerConnection) => pc.connectionState === 'connected' && pc.getSenders().length === 0).length)).toBe(2)
+      await Promise.all([a, b, c].map(directRoomReady))
       for (const page of [a, b, c]) await page.evaluate(() => {
         ;(window as any).__BLOCK_FIPS_SEEDS = true
         for (const socket of (window as any).__TEST_FIPS_SOCKETS ?? []) socket.close()
@@ -190,14 +216,15 @@ for (const mode of ['direct', 'incoming-only', 'routed', 'adaptive']) test(`FIPS
     await a.getByTitle('Share screen', { exact: true }).click()
     await expect(a.getByTitle('Stop sharing', { exact: true })).toBeVisible()
     await expect.poll(() => b.evaluate(() => [...(window as any).__DEBUG_PARTICIPANTS.values()].some((p: any) => p.screenSharing))).toBe(true)
-    await expect.poll(() => b.locator('video').evaluateAll(videos => videos.some(video => video.videoWidth === 640 && video.videoHeight === 360))).toBe(true)
+    await expect.poll(() => receivedVideoSource(b)).toBe('screen')
     await a.getByTitle('Stop sharing', { exact: true }).click()
     await expect(a.getByTitle('Share screen', { exact: true })).toBeVisible()
-    await expect.poll(() => b.locator('video').evaluateAll(videos => videos.some(video => video.videoWidth === 1280 && video.videoHeight === 720))).toBe(true)
+    await expect.poll(() => receivedVideoSource(b)).toBe('camera')
     await b.getByTitle('Leave meeting').click()
     await expect(a.getByTestId('video-tile')).toHaveCount(2)
     await a.screenshot({ path: `work/fips-migration/${routed ? 'routed' : 'direct'}-meeting.png` })
     for (const page of [a, c]) await page.getByTitle('Leave meeting').click()
+    await expect(a.getByRole('button', { name: 'Start Meeting' })).toBeVisible()
     await expect.poll(() => a.evaluate(() => ((window as any).__TEST_CONNECTIONS ?? []).every((pc: RTCPeerConnection) => pc.connectionState === 'closed'))).toBe(true)
   } finally { await Promise.all(contexts.map(context => context.close())) }
 })

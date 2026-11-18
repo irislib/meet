@@ -14,7 +14,7 @@ function binding(overrides = {}) {
 }
 it('binds the signed owner to a fresh per-meeting FIPS identity', () => {
   const event = binding()
-  expect(readMeetingPresence(event, room, now)).toEqual({ owner: event.pubkey, peer: `02${peer.slice(2)}`, name: 'Alice', issuedAt: now })
+  expect(readMeetingPresence(event, room, now)).toEqual({ owner: event.pubkey, peer: `02${peer.slice(2)}`, address: peer, name: 'Alice', issuedAt: now })
 })
 it('rejects another room, a forged owner, a malformed peer and a future binding', () => {
   expect(readMeetingPresence(binding(), 'cd'.repeat(32), now)).toBeNull()
