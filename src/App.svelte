@@ -18,8 +18,8 @@
   let initializing = true
   let updateAvailable = false
   let logoutDialog: HTMLDialogElement
-  let profileSettingsDialog: HTMLDialogElement
-  let showProfileSettings = false
+  let settingsDialog: HTMLDialogElement
+  let showSettings = false
   let showUserMenu = false
   $: profiles = $identity ? [{
     id: $identity.pubkey,
@@ -40,9 +40,9 @@
     showUserMenu = false
   }
 
-  function openProfileSettings() {
-    showProfileSettings = true
-    profileSettingsDialog.showModal()
+  function openSettings() {
+    showSettings = true
+    settingsDialog.showModal()
     closeUserMenu()
   }
 
@@ -125,7 +125,7 @@
 
   function handleLogout() {
     logoutDialog.close()
-    profileSettingsDialog.close()
+    settingsDialog.close()
     closeUserMenu()
     logout()
     leaveMeeting()
@@ -168,38 +168,37 @@
           <img src={meetIconUrl} alt="Iris Meet" class="w-8 h-8 shrink-0" draggable="false" />
           <h1 class="text-xl font-semibold leading-none">Meet</h1>
         </button>
-        <div class="relative">
-          <button
-            class="flex items-center gap-2 cursor-pointer bg-transparent border-none p-0"
-            aria-label="Profile menu"
-            aria-expanded={showUserMenu}
-            on:click={toggleUserMenu}
-          >
-            <Avatar pubkey={$identity?.pubkey || ''} size={32} />
-            <span class="text-sm text-gray-300 hidden sm:block"><Name pubkey={$identity?.pubkey || ''} /></span>
-            <span class="i-carbon-chevron-down text-gray-400 text-xs"></span>
+        <div class="flex items-center gap-2">
+          <button type="button" class="btn-ghost" on:click={openSettings} aria-label="Settings">
+            <span class="i-carbon-settings" aria-hidden="true"></span>
+            <span class="hidden sm:inline">Settings</span>
           </button>
-
-          {#if showUserMenu}
-            <div
-              class="absolute right-0 top-full mt-1 w-48 bg-surface border border-surface-lighter rounded-lg shadow-xl z-50"
+          <div class="relative">
+            <button
+              class="flex items-center gap-2 cursor-pointer bg-transparent border-none p-0"
+              aria-label="Profile menu"
+              aria-expanded={showUserMenu}
+              on:click={toggleUserMenu}
             >
-              <button
-                class="btn-ghost w-full text-left text-sm flex items-center gap-2"
-                on:click={openProfileSettings}
+              <Avatar pubkey={$identity?.pubkey || ''} size={32} />
+              <span class="text-sm text-gray-300 hidden sm:block"><Name pubkey={$identity?.pubkey || ''} /></span>
+              <span class="i-carbon-chevron-down text-gray-400 text-xs"></span>
+            </button>
+
+            {#if showUserMenu}
+              <div
+                class="absolute right-0 top-full mt-1 w-48 bg-surface border border-surface-lighter rounded-lg shadow-xl z-50"
               >
-                <span class="i-carbon-settings" aria-hidden="true"></span>
-                Profile settings
-              </button>
-              <button
-                class="btn-ghost w-full text-left text-sm flex items-center gap-2"
-                on:click={() => logoutDialog.showModal()}
-              >
-                <span class="i-carbon-logout"></span>
-                Logout
-              </button>
-            </div>
-          {/if}
+                <button
+                  class="btn-ghost w-full text-left text-sm flex items-center gap-2"
+                  on:click={() => logoutDialog.showModal()}
+                >
+                  <span class="i-carbon-logout"></span>
+                  Logout
+                </button>
+              </div>
+            {/if}
+          </div>
         </div>
       </header>
 
@@ -211,14 +210,14 @@
         ></div>
       {/if}
 
-      <dialog bind:this={profileSettingsDialog} on:close={() => showProfileSettings = false} aria-labelledby="profile-settings-title" class="m-auto w-11/12 max-w-lg rounded-xl bg-surface p-5 text-white backdrop:bg-black/60" style="--iris-settings-surface: #2d2d2d">
+      <dialog bind:this={settingsDialog} on:close={() => showSettings = false} aria-labelledby="settings-title" class="m-auto w-11/12 max-w-lg rounded-xl bg-surface p-5 text-white backdrop:bg-black/60" style="--iris-settings-surface: #2d2d2d">
         <div class="mb-3 flex items-center justify-between gap-3">
-          <h2 id="profile-settings-title" class="text-lg font-semibold">Profile settings</h2>
+          <h2 id="settings-title" class="text-lg font-semibold">Settings</h2>
           <form method="dialog">
             <button class="btn-secondary">Close</button>
           </form>
         </div>
-        {#if showProfileSettings}
+        {#if showSettings}
           <ProfileSettings
             {profiles}
             activeProfileId={$identity?.pubkey ?? null}
@@ -235,7 +234,7 @@
         <h2 id="logout-title" class="text-lg font-semibold">Log out?</h2>
         <p class="mt-2 text-sm text-gray-300">This will sign you out of Meet on this device.</p>
         {#if $identity?.canCopySecretKey}
-          <p class="mt-2 text-sm text-gray-300">Save your private key from Profile settings if you want to keep using this profile. Signing out removes the key from this browser.</p>
+          <p class="mt-2 text-sm text-gray-300">Save your private key from Settings if you want to keep using this profile. Signing out removes the key from this browser.</p>
         {/if}
         <div class="mt-5 flex justify-end gap-2">
           <button class="btn-secondary" on:click={() => logoutDialog.close()}>Cancel</button>

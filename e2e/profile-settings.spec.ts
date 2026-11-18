@@ -3,6 +3,7 @@ import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 import { bytesToHex } from 'nostr-tools/utils';
 
 test('profile settings show the signed-in profile and copy its local key only on request', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   const secret = generateSecretKey();
   const pubkey = getPublicKey(secret);
   await page.addInitScript(({ hex, pubkey, nsec }) => {
@@ -19,9 +20,9 @@ test('profile settings show the signed-in profile and copy its local key only on
   }, { hex: bytesToHex(secret), pubkey, nsec: nip19.nsecEncode(secret) });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Start a Meeting' })).toBeVisible();
-  await page.getByRole('button', { name: 'Profile menu' }).click();
-  await page.getByRole('button', { name: 'Profile settings' }).click();
-  const settings = page.getByRole('dialog', { name: 'Profile settings' });
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await expect(settings.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
   await expect(settings.getByText('Meeting profile', { exact: true })).toBeVisible();
   await expect(settings).toContainText(nip19.npubEncode(pubkey));
   await expect(settings.getByText(/nsec1[0-9a-z]+/)).toHaveCount(0);
