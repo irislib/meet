@@ -2,7 +2,7 @@ import { requestBrowserSigner, restoreBrowserSigner, isBrowserSignerSession, typ
 import { createNostrIdentitySignerFromSecretKey, createNostrIdentitySignerFromNip07, type NostrIdentityEventSigner } from '@iris/identity/signers'
 import { setNostrSigner } from './nostr'
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
-import { writable, derived } from 'svelte/store'
+import { writable, derived, get } from 'svelte/store'
 import { saveLocalProfile, clearLocalProfile, getLocalProfile } from './profile'
 
 // Helper functions
@@ -23,6 +23,7 @@ export interface Identity {
   signer: NostrIdentityEventSigner
   displayName: string | null
   isNip07: boolean
+  canCopySecretKey: boolean
 }
 
 const IDENTITY_STORAGE_KEY = 'iris-meet-identity'
@@ -65,11 +66,28 @@ export function loadStoredIdentity(): string | null {
   }
 }
 
-export function saveIdentity(privkeyHex: string): void {
+export function saveIdentity(privkeyHex: string): boolean {
   try {
     localStorage.setItem(IDENTITY_STORAGE_KEY, privkeyHex)
+    return true
   } catch {
     console.warn('Failed to save identity to localStorage')
+    return false
+  }
+}
+
+export function getLocalProfileNsec(pubkey: string): string | null {
+  const current = get(identity)
+  if (!current?.canCopySecretKey || current.pubkey !== pubkey) return null
+  const stored = loadStoredIdentity()
+  if (!stored || !/^[0-9a-f]{64}$/i.test(stored)) return null
+  const bytes = hexToBytes(stored)
+  try {
+    return getPublicKey(bytes) === pubkey ? nip19.nsecEncode(bytes) : null
+  } catch {
+    return null
+  } finally {
+    bytes.fill(0)
   }
 }
 
@@ -92,20 +110,19 @@ export async function loginWithPrivkey(privkeyHex: string, displayName: string |
     signer,
     displayName,
     isNip07: false,
+    canCopySecretKey: saveIdentity(privkeyHex),
   })
 
   // Save local profile rumor for display in UI and sending to peers
   if (displayName) {
     saveLocalProfile(pubkey, displayName)
   }
-
-  saveIdentity(privkeyHex)
 }
 
 function activateRemoteSigner(session: BrowserSignerSession, displayName: string | null): void {
   const signer = restoreBrowserSigner(session)
   setNostrSigner(signer)
-  identity.set({ pubkey: session.pubkey, signer, displayName, isNip07: false })
+  identity.set({ pubkey: session.pubkey, signer, displayName, isNip07: false, canCopySecretKey: false })
   if (displayName) saveLocalProfile(session.pubkey, displayName)
 }
 
@@ -132,6 +149,7 @@ export async function loginWithNip07(displayName: string | null = null): Promise
     signer,
     displayName,
     isNip07: true,
+    canCopySecretKey: false,
   })
 
   // Save marker to remember NIP-07 login

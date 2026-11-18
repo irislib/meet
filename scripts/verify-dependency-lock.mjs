@@ -18,8 +18,8 @@ const releases = {
     "integrity": "sha512-lIY8SHl7ebkQnIHH+kW3Dlh/E1HU1QU0rCs5oB2SneGRm+7fZ6uy8L9FFoJ6/QGwuBERmEetvkZAfBD89EXJyQ=="
   },
   "@iris/svelte-ui": {
-    "url": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.6/iris-svelte-ui-0.1.2.tgz",
-    "integrity": "sha512-noT2jG+eDoZ+m7GI0+hUvE4obpClkSWdRLomw8zkyaEvcTjnkzGlndw7W0xX49Qv4iMF0ewXkMJcz+NBpdt9yQ=="
+    "url": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.18/iris-svelte-ui-0.1.7.tgz",
+    "integrity": "sha512-ucMoZ+SyxpOosGQvAUXuPbhkXhjHjQhPr5qOh85MjdALFITAicYXKT0vN6ZdngINrNQxWjSks42Ek1xcq2ZOUA=="
   },
   "@iris/identity": {
     "url": "https://github.com/mmalmi/iris-kit/releases/download/runtime-v0.2.9/iris-identity-0.4.0.tgz",

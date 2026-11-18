@@ -6,7 +6,10 @@
   import MeetingRoom from './components/MeetingRoom.svelte'
   import Avatar from './components/Avatar.svelte'
   import Name from './components/Name.svelte'
-  import { identity, isLoggedIn, autoLogin, logout } from './lib/identity'
+  import ProfileSettings from '@iris/svelte-ui/ProfileSettings.svelte'
+  import { copyToClipboard } from '@iris/svelte-ui/clipboard'
+  import { nip19 } from 'nostr-tools'
+  import { identity, isLoggedIn, autoLogin, getLocalProfileNsec, logout } from './lib/identity'
   import { parseMeetingFromHash, currentMeeting, leaveMeeting, type Meeting } from './lib/meeting'
 
   type View = 'login' | 'home' | 'meeting'
@@ -15,7 +18,14 @@
   let initializing = true
   let updateAvailable = false
   let logoutDialog: HTMLDialogElement
+  let profileSettingsDialog: HTMLDialogElement
+  let showProfileSettings = false
   let showUserMenu = false
+  $: profiles = $identity ? [{
+    id: $identity.pubkey,
+    publicKey: nip19.npubEncode($identity.pubkey),
+    name: $identity.displayName ?? undefined,
+  }] : []
   const meetIconUrl = `${import.meta.env.BASE_URL}iris-meet-icon.svg`
 
   // Refresh idle pages when a release activates. In a room, let the attendee
@@ -28,6 +38,22 @@
 
   function closeUserMenu() {
     showUserMenu = false
+  }
+
+  function openProfileSettings() {
+    showProfileSettings = true
+    profileSettingsDialog.showModal()
+    closeUserMenu()
+  }
+
+  function confirmProfileSignOut(pubkey: string) {
+    if ($identity?.pubkey === pubkey) logoutDialog.showModal()
+  }
+
+  async function copyProfileSecretKey(pubkey: string) {
+    if (await copyToClipboard(getLocalProfileNsec(pubkey)) !== 'copied') {
+      throw new Error('Could not copy the private key.')
+    }
   }
 
   onMount(() => {
@@ -99,6 +125,7 @@
 
   function handleLogout() {
     logoutDialog.close()
+    profileSettingsDialog.close()
     closeUserMenu()
     logout()
     leaveMeeting()
@@ -144,6 +171,8 @@
         <div class="relative">
           <button
             class="flex items-center gap-2 cursor-pointer bg-transparent border-none p-0"
+            aria-label="Profile menu"
+            aria-expanded={showUserMenu}
             on:click={toggleUserMenu}
           >
             <Avatar pubkey={$identity?.pubkey || ''} size={32} />
@@ -155,6 +184,13 @@
             <div
               class="absolute right-0 top-full mt-1 w-48 bg-surface border border-surface-lighter rounded-lg shadow-xl z-50"
             >
+              <button
+                class="btn-ghost w-full text-left text-sm flex items-center gap-2"
+                on:click={openProfileSettings}
+              >
+                <span class="i-carbon-settings" aria-hidden="true"></span>
+                Profile settings
+              </button>
               <button
                 class="btn-ghost w-full text-left text-sm flex items-center gap-2"
                 on:click={() => logoutDialog.showModal()}
@@ -175,9 +211,32 @@
         ></div>
       {/if}
 
+      <dialog bind:this={profileSettingsDialog} on:close={() => showProfileSettings = false} aria-labelledby="profile-settings-title" class="m-auto w-11/12 max-w-lg rounded-xl bg-surface p-5 text-white backdrop:bg-black/60" style="--iris-settings-surface: #2d2d2d">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <h2 id="profile-settings-title" class="text-lg font-semibold">Profile settings</h2>
+          <form method="dialog">
+            <button class="btn-secondary">Close</button>
+          </form>
+        </div>
+        {#if showProfileSettings}
+          <ProfileSettings
+            {profiles}
+            activeProfileId={$identity?.pubkey ?? null}
+            onSignOut={confirmProfileSignOut}
+            onCopySecretKey={$identity?.canCopySecretKey ? copyProfileSecretKey : undefined}
+          >
+            {#snippet profileName(profile)}<Name pubkey={profile.id} />{/snippet}
+            {#snippet profileAvatar(profile)}<Avatar pubkey={profile.id} size={36} />{/snippet}
+          </ProfileSettings>
+        {/if}
+      </dialog>
+
       <dialog bind:this={logoutDialog} aria-labelledby="logout-title" class="m-auto max-w-sm rounded-xl bg-surface p-5 text-white backdrop:bg-black/60">
         <h2 id="logout-title" class="text-lg font-semibold">Log out?</h2>
         <p class="mt-2 text-sm text-gray-300">This will sign you out of Meet on this device.</p>
+        {#if $identity?.canCopySecretKey}
+          <p class="mt-2 text-sm text-gray-300">Save your private key from Profile settings if you want to keep using this profile. Signing out removes the key from this browser.</p>
+        {/if}
         <div class="mt-5 flex justify-end gap-2">
           <button class="btn-secondary" on:click={() => logoutDialog.close()}>Cancel</button>
           <button class="btn-danger" on:click={handleLogout}>Log out</button>
