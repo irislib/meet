@@ -11,6 +11,7 @@ export interface MeetingEndpoint {
 export interface MediaState { audioEnabled: boolean; videoEnabled: boolean; screenSharing: boolean }
 export interface TransportChat { id: string; text: string; timestamp: number }
 interface Callbacks {
+  heartbeat?(peer: string): void
   connected?(peer: string): void
   failed?(peer: string): void
   leave?(peer: string): void
@@ -137,7 +138,10 @@ export class MeetingTransport {
           if (!p.state || ['audioEnabled', 'videoEnabled', 'screenSharing'].some(k => typeof p.state[k] !== 'boolean')) return
           this.heard(peer, state)
           this.callbacks.state?.(peer, p.state)
-          if (p.type === 'hello') this.send(peer, { type: 'state', state: this.state })
+          if (p.type === 'hello') {
+            this.send(peer, { type: 'state', state: this.state })
+            this.callbacks.heartbeat?.(peer)
+          }
           break
         case 'chat':
           if (typeof p.id !== 'string' || p.id.length > 64 || typeof p.text !== 'string' || !p.text.trim() || encoder.encode(p.text).length > 800 || !Number.isSafeInteger(p.timestamp)) return

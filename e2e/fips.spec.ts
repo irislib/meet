@@ -58,8 +58,16 @@ for (const mode of ['direct', 'incoming-only', 'routed', 'adaptive']) test(`FIPS
       Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', { value: async () => {
         const canvas = document.createElement('canvas')
         canvas.width = 640; canvas.height = 360
-        canvas.getContext('2d')!.fillRect(0, 0, 640, 360)
-        return canvas.captureStream(10)
+        const drawing = canvas.getContext('2d')!
+        const stream = canvas.captureStream(10)
+        let frame = 0
+        const timer = setInterval(() => {
+          const [track] = stream.getVideoTracks()
+          if (track.readyState === 'ended') { clearInterval(timer); return }
+          drawing.fillStyle = frame++ % 2 ? 'black' : 'white'
+          drawing.fillRect(0, 0, canvas.width, canvas.height)
+        }, 100)
+        return stream
       } })
     }, { routed, incomingOnly: mode === 'incoming-only' && index === 1 })
     const [a, b, c] = await Promise.all(contexts.map(c => c.newPage()))
