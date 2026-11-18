@@ -1,32 +1,17 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
-import { parsePublishOutput } from './release-site.mjs'
+import { resolveHtreeCommand } from './hashtreePaths.mjs'
+import { parsePublishOutput, siteTreeName } from './release-site.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const appDir = path.resolve(__dirname, '..')
-const workspaceDir = path.resolve(appDir, '..')
-const manifestPath = path.join(workspaceDir, 'hashtree', 'rust', 'Cargo.toml')
 const distDir = path.join(appDir, 'dist')
 
 function main() {
-  const result = spawnSync(
-    'cargo',
-    [
-      'run',
-      '--manifest-path',
-      manifestPath,
-      '-p',
-      'hashtree-cli',
-      '--bin',
-      'htree',
-      '--',
-      'add',
-      '.',
-      '--publish',
-      'meet',
-    ],
+  const [command, ...args] = resolveHtreeCommand('add', '.', '--publish', siteTreeName)
+  const result = spawnSync(command, args,
     {
       cwd: distDir,
       encoding: 'utf8',

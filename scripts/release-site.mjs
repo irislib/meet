@@ -38,10 +38,12 @@ const defaultWorkerCompatibilityDate = '2026-03-26'
  * @typedef {{ dryRun: true, steps: ReleaseStep[] }} DryRunResult
  */
 
+export const siteTreeName = 'meet-site'
+
 const profile = {
   appName: 'Iris Meet',
   distDir: 'dist',
-  treeName: 'meet',
+  treeName: siteTreeName,
   defaultWorkerName: 'iris-meet',
   defaultDomains: ['meet.iris.to'],
   workerScript: 'scripts/https-static-assets-worker.mjs',

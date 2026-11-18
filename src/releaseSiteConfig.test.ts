@@ -2,24 +2,13 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createReleasePlan } from '../scripts/release-site.mjs'
+import { createReleasePlan, parseArgs } from '../scripts/release-site.mjs'
 
 describe('release site config', () => {
   afterEach(() => vi.unstubAllEnvs())
   it('installs the frozen graph and publishes with the installed htree release', () => {
     vi.stubEnv('HTREE_BIN', '/fixture/verified-htree')
-    const plan = createReleasePlan({
-      dryRun: false,
-      skipCloudflare: true,
-      pagesOnly: false,
-      treeName: 'meet',
-      branch: undefined,
-      pagesProject: undefined,
-      workerName: undefined,
-      routes: [],
-      domains: [],
-      workerCompatibilityDate: '2026-03-26',
-    })
+    const plan = createReleasePlan(parseArgs(['--skip-cloudflare']))
 
     expect(plan.steps[0]).toMatchObject({
       id: 'install',
@@ -30,7 +19,7 @@ describe('release site config', () => {
       'add',
       '.',
       '--publish',
-      'meet',
+      'meet-site',
     ])
   })
 })
