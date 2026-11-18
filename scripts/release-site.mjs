@@ -2,7 +2,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { resolveHtreeCommand } from './hashtreePaths.mjs'
+import { resolveNativePublishCommand } from './hashtreePaths.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -219,7 +219,7 @@ export function createReleasePlan(options) {
     {
       id: 'publish',
       label: `Publish ${profile.appName} to hashtree`,
-      command: resolveHtreeCommand('add', '.', '--publish', options.treeName),
+      command: resolveNativePublishCommand(distDir, options.treeName, { dryRun: options.dryRun }),
       cwd: distDir,
     },
   ]
@@ -331,7 +331,7 @@ export function runRelease(options, runner = defaultRunner) {
     return { dryRun: true, steps: plan.steps }
   }
 
-  let publishOutput = ''
+  let publish
   let deployOutput = ''
   for (const step of plan.steps) {
     const result = runner(step)
@@ -342,15 +342,17 @@ export function runRelease(options, runner = defaultRunner) {
       ensureDistExists()
     }
     if (step.id === 'publish') {
-      publishOutput = `${result.stdout}\n${result.stderr}`
+      publish = parsePublishOutput(`${result.stdout}\n${result.stderr}`)
     }
     if (step.id === 'deploy') {
       deployOutput = `${result.stdout}\n${result.stderr}`
     }
   }
 
+  if (!publish) throw new Error('Missing Hashtree publication receipt')
+
   return {
-    publish: parsePublishOutput(publishOutput),
+    publish,
     pagesUrl: deployOutput ? parsePagesOutput(deployOutput) : null,
     pagesProject: options.skipCloudflare || options.workerName ? null : options.pagesProject ?? null,
     workerName: options.skipCloudflare ? null : options.workerName ?? null,
@@ -365,6 +367,8 @@ export function usage() {
 
 Build once, test the built output, publish to hashtree, then deploy that same
 directory to Cloudflare Workers Static Assets or Cloudflare Pages.
+
+Set IRIS_NATIVE_RELEASE_GATE to the absolute path of the pinned Iris Sites gate.
 
 Options:
   --worker-name <name>    Cloudflare Worker service name for static assets
