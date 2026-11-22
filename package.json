@@ -61,7 +61,7 @@
   },
   "pnpm": {
     "patchedDependencies": {
-      "nostr-pubsub@0.5.40": "patches/nostr-pubsub-stop.patch"
+      "nostr-pubsub@0.5.41": "patches/nostr-pubsub-stop.patch"
     },
     "overrides": {
       "nostr-tools": "2.23.12",

@@ -23,7 +23,7 @@ overrides:
   '@hashtree/nostr-pubsub>@hashtree/nostr': https://github.com/mmalmi/hashtree/releases/download/hashtree-ts-runtime-v0.5.40/hashtree-nostr-0.2.7.tgz
 
 patchedDependencies:
-  nostr-pubsub@0.5.40:
+  nostr-pubsub@0.5.41:
     hash: 321398dcdaa04f57c8192ed232a8e972b4dad14ace0fc6bcb39febf1516ddb46
     path: patches/nostr-pubsub-stop.patch
 
