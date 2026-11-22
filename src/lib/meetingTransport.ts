@@ -3,9 +3,12 @@ import { CallAdaptation } from './callAdaptation'
 import { callEncoding } from './callQuality'
 
 export const MEETING_PORT = 39512
-export const canonicalPeer = (peer: string) => /^(02|03)[a-f0-9]{64}$/.test(peer) ? `02${peer.slice(2)}` : ''
+export const canonicalPeer = (address: string) => /^(02|03)[a-f0-9]{64}$/.test(address) ? `02${address.slice(2)}` : ''
+export function authenticatedMeetingPeer(address: string, peerId?: string) {
+  return peerId === undefined ? canonicalPeer(address) : canonicalPeer(`02${peerId}`)
+}
 export interface MeetingEndpoint {
-  registerService(port: number, handler: (packet: { src: string; payload: Uint8Array }) => void): () => void
+  registerService(port: number, handler: (packet: { src: string; peerId?: string; payload: Uint8Array }) => void): () => void
   sendDatagram(packet: { dst: string; srcPort: number; dstPort: number; payload: Uint8Array }): Promise<void>
 }
 export interface MediaState { audioEnabled: boolean; videoEnabled: boolean; screenSharing: boolean }
@@ -51,7 +54,7 @@ export class MeetingTransport {
   private targetBitrate = 1_200_000
   get videoBitrate() { return this.targetBitrate }
   constructor(private endpoint: MeetingEndpoint, private room: string, private callbacks: Callbacks) {
-    this.unregister = endpoint.registerService(MEETING_PORT, ({ src, payload }) => this.receive(src, payload))
+    this.unregister = endpoint.registerService(MEETING_PORT, ({ peerId, src, payload }) => this.receive(authenticatedMeetingPeer(src, peerId), payload))
     this.timer = setInterval(() => this.tick(), 1000)
   }
   addPeer(address: string) {
@@ -116,8 +119,8 @@ export class MeetingTransport {
   private sendBytes(peer: string, payload: Uint8Array) {
     if (!this.stopped) void this.endpoint.sendDatagram({ dst: peer, srcPort: MEETING_PORT, dstPort: MEETING_PORT, payload }).catch(() => {})
   }
-  private receive(address: string, payload: Uint8Array) {
-    const peer = canonicalPeer(address), state = this.peers.get(peer)
+  private receive(peer: string, payload: Uint8Array) {
+    const state = this.peers.get(peer)
     if (!state || this.stopped) return
     if (payload[0] === 73) {
       const frame = state.receiver.receive(this.room, payload)

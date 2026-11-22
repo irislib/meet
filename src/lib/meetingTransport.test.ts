@@ -23,6 +23,23 @@ function network() {
 afterEach(() => vi.useRealTimers())
 
 describe('authenticated meeting transport', () => {
+  it('admits call packets by their authenticated peer ID', async () => {
+    let deliver!: (packet: { peerId: string; src: string; payload: Uint8Array }) => void
+    const message = vi.fn()
+    const transport = new MeetingTransport({
+      registerService(_port, handler) { deliver = handler; return () => {} },
+      sendDatagram: async () => {},
+    }, room, { message })
+    try {
+      transport.addPeer(bob)
+      const payload = new TextEncoder().encode(JSON.stringify({ v: 1, room, type: 'chat', id: '1', text: 'hello', timestamp: 1 }))
+      deliver({ peerId: alice.slice(2), src: bob, payload })
+      expect(message).not.toHaveBeenCalled()
+      deliver({ peerId: bob.slice(2), src: bob, payload })
+      expect(message).toHaveBeenCalledWith(`02${bob.slice(2)}`, expect.objectContaining({ text: 'hello' }))
+    } finally { await transport.close() }
+  })
+
   it('reports complete video delivery and includes partially lost frames in feedback', async () => {
     vi.useFakeTimers()
     const net = network(), bitrate = vi.fn()

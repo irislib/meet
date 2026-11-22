@@ -9,7 +9,7 @@ import { getNostrRuntime } from './nostr'
 import { identity } from './identity'
 import { createMeetingEncryption } from './encryption'
 import { addProfileToCache } from './profile'
-import { canonicalPeer, MeetingTransport } from './meetingTransport'
+import { authenticatedMeetingPeer, canonicalPeer, MeetingTransport } from './meetingTransport'
 import { MeetingMedia } from './meetingMedia'
 import { MEETING_BINDING_KIND, readMeetingPresence } from './meetingPresence'
 import { MEETING_PRESENCE_KIND, PRESENCE_PUBLISH_OPTIONS, startMeetingDiscovery } from './meetingDiscovery'
@@ -219,13 +219,20 @@ export async function joinRoom(secret: string) {
   }
   const localPeer = canonicalPeer(peer)
   const directAddresses = new Map<string, { address: string; dialAfter: number }>()
-  const established = new Set<string>()
+  const established = new Map<string, Set<string>>()
   node.on('peer', value => {
-    const event = value as PeerEvent
+    const event = value as PeerEvent & { peerId?: string }
     if (event.remoteAddr.transport !== 'webrtc') return
-    const id = canonicalPeer(event.remotePubkey)
-    if (event.state === 'connected') established.add(id)
-    else established.delete(id)
+    const id = authenticatedMeetingPeer(event.remotePubkey, event.peerId)
+    if (!id) return
+    const paths = established.get(id) ?? new Set<string>()
+    if (event.state === 'connected') {
+      paths.add(event.remoteAddr.addr)
+      established.set(id, paths)
+    } else {
+      paths.delete(event.remoteAddr.addr)
+      if (paths.size === 0) established.delete(id)
+    }
   })
   if (import.meta.env.DEV) Object.assign(window, { __DEBUG_DIRECT_PEERS: established })
   const retireDirect = (peer: string) => {

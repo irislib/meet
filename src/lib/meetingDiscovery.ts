@@ -2,27 +2,9 @@ import {
   FipsNostrPubsubClient, FipsNostrPubsubEventSource,
   type FipsPubsubClientNode, type NostrEvent, type NostrRuntime, type RuntimeSubscribeOptions,
 } from 'nostr-pubsub'
-import { canonicalPeer } from './meetingTransport'
 
 export const MEETING_PRESENCE_KIND = 25050
 export const PRESENCE_PUBLISH_OPTIONS = { queue: false, localEcho: false } as const
-
-// FIPS identifies peers by their x-only key. Normalize authenticated incoming
-// keys too, so TCP tuples and admission use the same identity representation.
-function discoveryEndpoint(node: FipsPubsubClientNode): FipsPubsubClientNode {
-  return {
-    sendDatagram: args => node.sendDatagram(args),
-    registerService: (port, handler) => node.registerService(port, context => {
-      const src = canonicalPeer(context.src)
-      if (src) return handler({ ...context, src })
-    }),
-    on: (event, listener) => node.on?.(event, value => {
-      const change = value as { remotePubkey?: unknown } | null
-      listener(typeof change?.remotePubkey === 'string'
-        ? { ...change, remotePubkey: canonicalPeer(change.remotePubkey) } : value)
-    }) ?? (() => {}),
-  }
-}
 
 // One room-scoped interest, carried by relays and the meeting's existing FIPS node.
 export function startMeetingDiscovery(options: {
@@ -38,7 +20,7 @@ export function startMeetingDiscovery(options: {
   const { runtime } = options
   let closed = false, ready = false
   const client = new FipsNostrPubsubClient({
-    node: discoveryEndpoint(options.node), localPeerId: options.localPeerId,
+    node: options.node, localPeerId: options.localPeerId,
     peers: options.peers,
     allowedKinds: [MEETING_PRESENCE_KIND],
     limits: { maxCachedEvents: 256, maxReplayEvents: 256 },
