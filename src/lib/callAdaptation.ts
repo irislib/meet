@@ -10,7 +10,12 @@ export class CallAdaptation {
   private sentSinceFeedback = 0
   private healthyMs = 5000
   private frameDebt = 0
-  constructor(public cap: number, now = performance.now()) { this.target = Math.min(cap, 1_200_000); this.heard = now }
+  readonly minBitrate: number
+  constructor(public cap: number, now = performance.now(), minBitrate = 100_000) {
+    this.minBitrate = Math.min(cap, Math.max(50_000, minBitrate))
+    this.target = Math.min(cap, 1_200_000)
+    this.heard = now
+  }
   begin(now = performance.now()) { this.heard = now }
   sentFrame(seq?: number) {
     if (this.previousVideo === undefined && seq !== undefined) this.previousVideo = (seq - 1) >>> 0
@@ -39,12 +44,12 @@ export class CallAdaptation {
     if (loss > .02 || count === 0) {
       this.healthyMs = 0
       this.frameDebt = 0
-      this.target = Math.max(Math.min(this.cap, 100000), Math.floor(count === 0 ? this.target / 2 : Math.min(this.target * .75, bytes * 8000 / interval * .85)))
+      this.target = Math.max(Math.min(this.cap, this.minBitrate), Math.floor(count === 0 ? this.target / 2 : Math.min(this.target * .75, bytes * 8000 / interval * .85)))
     } else {
       this.healthyMs = Math.min(5000, this.healthyMs + interval)
       if (this.healthyMs >= 5000) this.target = Math.min(this.cap, this.target + Math.floor((this.target * .08 + 10000) * interval / 1000))
     }
   }
   tick(now = performance.now()) { if (now - this.heard > 3000) { this.healthyMs = 0; this.target = this.lower(); this.heard = now - 2001 } }
-  private lower() { return Math.max(Math.min(this.cap, 100000), Math.round(this.target * .75)) }
+  private lower() { return Math.max(Math.min(this.cap, this.minBitrate), Math.round(this.target * .75)) }
 }

@@ -14,6 +14,7 @@ import { authenticatedMeetingPeer, canonicalPeer, MeetingTransport } from './mee
 import { MeetingMedia } from './meetingMedia'
 import { MEETING_BINDING_KIND, readMeetingPresence } from './meetingPresence'
 import { MEETING_PRESENCE_KIND, PRESENCE_PUBLISH_OPTIONS, startMeetingDiscovery } from './meetingDiscovery'
+import type { PeerSubscription } from './callSubscriptions'
 
 export type ConnectionState = 'connecting' | 'connected' | 'failed'
 export interface Participant {
@@ -49,6 +50,8 @@ let active: {
   roomPubkey: string; discovery?: ReturnType<typeof startMeetingDiscovery>
   interval?: ReturnType<typeof setInterval>; presenceTimer?: ReturnType<typeof setTimeout>
   onPageHide?: (event: PageTransitionEvent) => void
+  onVisibilityChange?: () => void
+  unsubFocus?: () => void
 } | undefined
 
 function report(error: unknown) { meetingError.set(error instanceof Error ? error.message : String(error)) }
@@ -96,7 +99,7 @@ export async function restoreMediaPrefsForMeeting(meetingId: string) {
 }
 async function syncMedia() {
   const room = active, media = get(localMedia)
-  await room?.media.setCapture(media.stream, media.screenStream, media.audioEnabled, media.videoEnabled || media.screenSharing)
+  await room?.media.setCapture(media.stream, media.screenStream, media.audioEnabled, media.videoEnabled)
   if (room !== active) return
   room?.transport.setState({ audioEnabled: media.audioEnabled, videoEnabled: media.videoEnabled, screenSharing: media.screenSharing })
   persistMediaPrefs()
@@ -227,7 +230,12 @@ export async function joinRoom(secret: string) {
     ordered: false, maxRetransmits: 0,
     ...(import.meta.env.VITE_FIPS_STUN_SERVERS !== undefined ? { stunServers: import.meta.env.VITE_FIPS_STUN_SERVERS.split(',').filter(Boolean) } : {}),
   })
-  const node = new FipsNode({ identity: fipsIdentity, transports: [new WebSocketTransport({ seedUrls: seeds }), direct], routingMode: 'reply_learned' })
+  const node = new FipsNode({ identity: fipsIdentity, transports: [new WebSocketTransport({ seedUrls: seeds }), direct], strictClient: true })
+  if (import.meta.env.DEV) {
+    const fipsErrors: Array<{ where: string; msg: string; t: number }> = []
+    Object.assign(window, { __DEBUG_FIPS_ERRORS: fipsErrors })
+    node.on('error', (e: any) => fipsErrors.push({ where: String(e?.where), msg: String(e?.err?.message ?? e?.err), t: Math.round(performance.now()) }))
+  }
   async function stopNode() {
     try { await node.stop() }
     finally { for (const connection of connections) connection.close() }
@@ -248,6 +256,7 @@ export async function joinRoom(secret: string) {
       paths.delete(event.remoteAddr.addr)
       if (paths.size === 0) established.delete(id)
     }
+    if (run === generation) active?.transport.refreshTopology()
   })
   if (import.meta.env.DEV) Object.assign(window, { __DEBUG_DIRECT_PEERS: established })
   const retireDirect = (peer: string) => {
@@ -262,16 +271,27 @@ export async function joinRoom(secret: string) {
       void node.connect({ transport: 'webrtc', addr: remote.address }).catch(() => {})
     }
   }
+  const isMobile = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0 && typeof window !== 'undefined' && window.innerWidth < 768
+  const urlSfu = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('sfu') : null
+  const dedicatedForwarder = (typeof window !== 'undefined' ? (window as any).__MEETING_DEDICATED_FORWARDER : undefined) || urlSfu || undefined
+  const maxVideoDecoders = (typeof window !== 'undefined' ? (window as any).__MEETING_MAX_VIDEO_DECODERS : undefined) ?? (isMobile ? 4 : 9)
+  const layerRecoveryMs = typeof window !== 'undefined' ? (window as any).__MEETING_LAYER_RECOVERY_MS : undefined
+
   const transport: MeetingTransport = new MeetingTransport(node, encryption.roomPubkey.slice(0, 32), {
     connected(peer) {
       if (run !== generation) return
       updateParticipant(peer, { connectionState: 'connected' })
+      connectDirect(peer)
       media.requestKeyframe()
     },
     heartbeat: connectDirect,
     failed(peer) { if (run === generation) updateParticipant(peer, { connectionState: 'failed' }) },
     leave(peer) { if (run === generation) { retireDirect(peer); removeParticipant(peer) } },
-    state(peer, state) { if (run === generation) updateParticipant(peer, state) },
+    state(peer, state) {
+      if (run !== generation) return
+      updateParticipant(peer, state)
+      media.setPeerScreen(peer, state.screenSharing)
+    },
     message(peer, message) {
       if (run !== generation) return
       const sender = findParticipant(get(participants), peer)
@@ -280,23 +300,58 @@ export async function joinRoom(secret: string) {
       unreadCount.update(n => n + 1)
     },
     media(peer, frame) { media.receive(peer, frame) },
-    keyframe() { media.requestKeyframe() },
+    keyframe(trackId) { media.requestKeyframe(trackId) },
     bitrate(bitsPerSecond) { media.setVideoBitrate(bitsPerSecond) },
+    layerBitrates(bitrates) { media.setLayerBitrates(bitrates) },
+    demand(demand) { media.setDemand(demand) },
     error: report,
+  }, {
+    identity: fipsIdentity,
+    dedicatedForwarder,
+    maxVideoDecoders,
+    mobile: isMobile,
+    background: typeof document !== 'undefined' ? document.visibilityState !== 'visible' : false,
+    layerRecoveryMs,
+    getDirectPeers: () => new Set(established.keys()),
   })
+  if (import.meta.env.DEV) {
+    Object.assign(window, {
+      __DEBUG_MEETING_TRANSPORT: () => transport.metrics(),
+      __SET_MEETING_SUB_OVERRIDES: (overrides?: Record<string, Partial<PeerSubscription>>) => {
+        if (!overrides) { transport.setSubscriptionOverrides(undefined); return }
+        const map = new Map<string, Partial<PeerSubscription>>()
+        const currentParticipants = get(participants)
+        for (const [key, value] of Object.entries(overrides)) {
+          // Accept either displayName, owner pubkey, or canonical FIPS peer.
+          const byName = [...currentParticipants.values()].find(p => p.displayName === key || p.pubkey === key || p.fipsPeer === key)
+          map.set(byName?.fipsPeer ?? canonicalPeer(key), value)
+        }
+        transport.setSubscriptionOverrides(map)
+      },
+    })
+  }
   let media: MeetingMedia
   try {
     media = await MeetingMedia.open((frame, allowed) => transport.sendMedia(frame, allowed),
       (peer, stream) => { if (run === generation) updateParticipant(peer, { stream }) },
-      peer => transport.requestKeyframe(peer), report)
+      (peer, trackId) => transport.requestKeyframe(peer, trackId), report)
     if (run !== generation) { media.close(); await transport.close(); await stopNode(); return }
     const onPageHide = (event: PageTransitionEvent) => {
       // A cached page keeps this session and its signed presence binding.
       // Only announce departure when the page is actually being discarded.
       if (!event.persisted) void Promise.allSettled(transport.sendLeave())
     }
+    const onVisibilityChange = () => {
+      if (run === generation) transport.setBackground(document.visibilityState !== 'visible')
+    }
+    const unsubFocus = focusedPubkey.subscribe(pubkey => {
+      if (run !== generation) return
+      const focused = pubkey ? get(participants).get(pubkey)?.fipsPeer ?? null : null
+      transport.setViewport(focused)
+    })
     window.addEventListener('pagehide', onPageHide)
-    active = { stopNode, transport, media, roomPubkey: encryption.roomPubkey, onPageHide }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    active = { stopNode, transport, media, roomPubkey: encryption.roomPubkey, onPageHide, onVisibilityChange, unsubFocus }
     await node.start()
     if (run !== generation) { await stopNode(); return }
     const room = active!
@@ -347,8 +402,11 @@ export async function joinRoom(secret: string) {
           // Give one endpoint the first offer. The other can dial on a later
           // heartbeat if the preferred endpoint can only accept connections.
           directAddresses.set(peer, { address: data.address, dialAfter: localPeer < peer ? 0 : performance.now() + 1500 })
-          transport.addPeer(peer)
-          connectDirect(peer)
+          // Newcomer initiates FSP hello immediately (N distinct targets -> zero seed
+          // per-target lookup throttling); existing peers fall back with staggered delay.
+          const isInitiator = issuedAt > data.issuedAt || (issuedAt === data.issuedAt && localPeer < peer)
+          const staggerSlot = parseInt(localPeer.slice(2, 6), 16) % 8
+          transport.addPeer(peer, isInitiator ? 0 : 2500 + staggerSlot * 600)
           room.discovery?.refreshPeers()
           await media.addPeer(peer)
           if (run === generation) schedulePresence()
@@ -368,6 +426,8 @@ export async function leaveRoom() {
   active = undefined
   if (room) {
     if (room.onPageHide) window.removeEventListener('pagehide', room.onPageHide)
+    if (room.onVisibilityChange) document.removeEventListener('visibilitychange', room.onVisibilityChange)
+    room.unsubFocus?.()
     clearInterval(room.interval)
     if (room.presenceTimer !== undefined) clearTimeout(room.presenceTimer)
     room.media.close()

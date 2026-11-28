@@ -36,3 +36,44 @@ export function callVideoSize(settings: CallQualitySettings, capture?: { width?:
   const scale = Math.min(1, (portrait ? shortEdge : longEdge) / width, (portrait ? longEdge : shortEdge) / height)
   return { width: Math.max(2, Math.floor(width * scale / 2) * 2), height: Math.max(2, Math.floor(height * scale / 2) * 2) }
 }
+
+/** Layer-specific encoding ceilings for dual-layer simulcast and independent screen sharing. */
+export const LAYER_PROFILES = {
+  low: { minBitrate: 90_000, defaultBitrate: 180_000, maxBitrate: 260_000, maxWidth: 480, maxHeight: 270, maxFramerate: 15, codec: 'avc1.42e01f' },
+  high: { minBitrate: 350_000, defaultBitrate: 1_200_000, maxBitrate: 2_000_000, maxWidth: 1280, maxHeight: 720, maxFramerate: 30, codec: 'avc1.42e01f' },
+  screen: { minBitrate: 250_000, defaultBitrate: 1_000_000, maxBitrate: 1_800_000, maxWidth: 1280, maxHeight: 720, maxFramerate: 15, codec: 'avc1.42e01f' },
+} as const
+
+export type SimulcastLayerName = keyof typeof LAYER_PROFILES
+
+export function layerVideoGeometry(
+  layer: SimulcastLayerName,
+  capture: { width?: number; height?: number } | undefined,
+  bitrate: number,
+): { width: number; height: number; framerate: number; bitrate: number } {
+  const profile = LAYER_PROFILES[layer]
+  const clamped = Math.max(profile.minBitrate, Math.min(profile.maxBitrate, Math.round(bitrate)))
+  const srcW = capture?.width || profile.maxWidth
+  const srcH = capture?.height || profile.maxHeight
+  let longEdge: number = profile.maxWidth
+  let fps: number = profile.maxFramerate
+  if (layer === 'low') {
+    longEdge = clamped < 130_000 ? 256 : clamped < 180_000 ? 320 : 480
+    fps = clamped < 130_000 ? 10 : 15
+  } else if (layer === 'high') {
+    longEdge = clamped < 500_000 ? 480 : clamped < 950_000 ? 960 : 1280
+    fps = clamped < 500_000 ? 15 : 30
+  } else {
+    longEdge = clamped < 450_000 ? 960 : 1280
+    fps = clamped < 450_000 ? 10 : 15
+  }
+  const shortEdge = longEdge * profile.maxHeight / profile.maxWidth
+  const portrait = srcH > srcW
+  const scale = Math.min(1, (portrait ? shortEdge : longEdge) / srcW, (portrait ? longEdge : shortEdge) / srcH)
+  return {
+    width: Math.max(2, Math.floor(srcW * scale / 2) * 2),
+    height: Math.max(2, Math.floor(srcH * scale / 2) * 2),
+    framerate: fps,
+    bitrate: clamped,
+  }
+}

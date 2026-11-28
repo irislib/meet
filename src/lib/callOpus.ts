@@ -24,6 +24,11 @@ function getCompiledOpus(): Promise<WebAssembly.Module> {
   })
 }
 
+/** Per libopus/RFC 6716, a 1-2 byte TOC-only packet indicates DTX silence (do not transmit). */
+export function isDtxPacket(packet: Uint8Array): boolean {
+  return packet.length <= 2
+}
+
 /** One pinned libopus path preserves 20 ms capture timing and supplies PLC/in-band FEC. */
 export class CallOpus {
   private closed = false
