@@ -1,177 +1,99 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import VideoTile from './VideoTile.svelte'
-  import { participants, localMedia, focusedPubkey } from '../lib/meetingSession'
+  import { participants, localMedia, focusedPubkey, type Participant } from '../lib/meetingSession'
   import { identity } from '../lib/identity'
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && $focusedPubkey) {
-      focusedPubkey.set(null)
-    }
+    if (e.key === 'Escape' && $focusedPubkey) focusedPubkey.set(null)
   }
 
-  onMount(() => {
-    window.addEventListener('keydown', handleKeydown)
-  })
-
-  onDestroy(() => {
-    window.removeEventListener('keydown', handleKeydown)
-  })
+  onMount(() => { window.addEventListener('keydown', handleKeydown) })
+  onDestroy(() => { window.removeEventListener('keydown', handleKeydown) })
 
   $: participantList = Array.from($participants.values())
-  $: totalCount = participantList.length + 1 // +1 for local
+  $: totalCount = participantList.length + 1
   $: localPubkey = $identity?.pubkey || ''
-
-  // Find focused participant data
-  $: focusedParticipant = $focusedPubkey === localPubkey
-    ? null // local user is focused
-    : participantList.find(p => p.pubkey === $focusedPubkey)
-
   $: isLocalFocused = $focusedPubkey === localPubkey
-  $: isFocusMode = $focusedPubkey !== null
+  $: focusedParticipant = isLocalFocused ? null : participantList.find(p => p.pubkey === $focusedPubkey)
+  $: isFocusMode = isLocalFocused || !!focusedParticipant
+  $: otherParticipants = isFocusMode ? participantList.filter(p => p.pubkey !== $focusedPubkey) : participantList
 
-  // Other participants (not focused) for the strip
-  $: otherParticipants = isFocusMode
-    ? participantList.filter(p => p.pubkey !== $focusedPubkey)
-    : participantList
-
-  // Calculate optimal columns for the participant count (grid mode)
   $: cols = totalCount === 1 ? 1
-          : totalCount === 2 ? 2
           : totalCount <= 4 ? 2
-          : totalCount <= 6 ? 3
           : totalCount <= 9 ? 3
           : 4
-
-  // Calculate rows for grid sizing
   $: rows = Math.ceil(totalCount / cols)
-
-  // Strip count (others + local if not focused)
-  $: stripCount = isFocusMode
-    ? (isLocalFocused ? otherParticipants.length : otherParticipants.length + 1)
-    : 0
+  $: stripCount = isFocusMode ? (isLocalFocused ? otherParticipants.length : otherParticipants.length + 1) : 0
 
   function handleTileClick(pubkey: string) {
-    if ($focusedPubkey === pubkey) {
-      // Clicking focused tile unfocuses
-      focusedPubkey.set(null)
-    } else {
-      focusedPubkey.set(pubkey)
-    }
+    focusedPubkey.set($focusedPubkey === pubkey ? null : pubkey)
   }
 </script>
 
+{#snippet localTile()}
+  <VideoTile
+    stream={$localMedia.screenSharing ? $localMedia.screenStream : $localMedia.stream}
+    pubkey={localPubkey}
+    muted={true}
+    mirrored={!$localMedia.screenSharing}
+    audioEnabled={$localMedia.audioEnabled}
+    videoEnabled={$localMedia.videoEnabled || $localMedia.screenSharing}
+    isLocal={true}
+    isScreenShare={$localMedia.screenSharing}
+    on:click={() => handleTileClick(localPubkey)}
+  />
+{/snippet}
+
+{#snippet remoteTile(participant: Participant)}
+  <VideoTile
+    stream={participant.stream}
+    pubkey={participant.pubkey}
+    muted={false}
+    mirrored={false}
+    audioEnabled={participant.audioEnabled}
+    videoEnabled={participant.videoEnabled || participant.screenSharing}
+    isScreenShare={participant.screenSharing}
+    connectionState={participant.connectionState}
+    isLocal={false}
+    on:click={() => handleTileClick(participant.pubkey)}
+  />
+{/snippet}
+
 {#if isFocusMode}
-  <!-- Focus mode: large focused tile + small strip -->
   <div class="focus-layout">
-    <!-- Focused tile -->
     <div class="focused-tile">
       {#if isLocalFocused}
-        <VideoTile
-          stream={$localMedia.screenSharing ? $localMedia.screenStream : $localMedia.stream}
-          pubkey={localPubkey}
-          muted={true}
-          mirrored={!$localMedia.screenSharing}
-          audioEnabled={$localMedia.audioEnabled}
-          videoEnabled={$localMedia.videoEnabled || $localMedia.screenSharing}
-          isLocal={true}
-          isScreenShare={$localMedia.screenSharing}
-          on:click={() => handleTileClick(localPubkey)}
-        />
+        {@render localTile()}
       {:else if focusedParticipant}
-        <VideoTile
-          stream={focusedParticipant.stream}
-          pubkey={focusedParticipant.pubkey}
-          muted={false}
-          mirrored={false}
-          audioEnabled={focusedParticipant.audioEnabled}
-          videoEnabled={focusedParticipant.videoEnabled || focusedParticipant.screenSharing}
-          isScreenShare={focusedParticipant.screenSharing}
-          connectionState={focusedParticipant.connectionState}
-          isLocal={false}
-          on:click={() => handleTileClick(focusedParticipant.pubkey)}
-        />
+        {@render remoteTile(focusedParticipant)}
       {/if}
     </div>
 
-    <!-- Strip of other participants -->
     {#if stripCount > 0}
       <div class="tile-strip" style="--strip-count: {stripCount};">
         {#if !isLocalFocused}
-          <VideoTile
-            stream={$localMedia.screenSharing ? $localMedia.screenStream : $localMedia.stream}
-            pubkey={localPubkey}
-            muted={true}
-            mirrored={!$localMedia.screenSharing}
-            audioEnabled={$localMedia.audioEnabled}
-            videoEnabled={$localMedia.videoEnabled || $localMedia.screenSharing}
-            isLocal={true}
-            isScreenShare={$localMedia.screenSharing}
-            on:click={() => handleTileClick(localPubkey)}
-          />
+          {@render localTile()}
         {/if}
         {#each otherParticipants as participant (participant.pubkey)}
-          <VideoTile
-            stream={participant.stream}
-            pubkey={participant.pubkey}
-            muted={false}
-            mirrored={false}
-            audioEnabled={participant.audioEnabled}
-            videoEnabled={participant.videoEnabled || participant.screenSharing}
-            isScreenShare={participant.screenSharing}
-            connectionState={participant.connectionState}
-            isLocal={false}
-            on:click={() => handleTileClick(participant.pubkey)}
-          />
+          {@render remoteTile(participant)}
         {/each}
       </div>
     {/if}
   </div>
 {:else}
-  <!-- Grid mode: equal sized tiles -->
-  <div
-    class="video-grid"
-    style="--cols: {cols}; --rows: {rows}; --total: {totalCount};"
-  >
-    <!-- Local video -->
-    <VideoTile
-      stream={$localMedia.screenSharing ? $localMedia.screenStream : $localMedia.stream}
-      pubkey={localPubkey}
-      muted={true}
-      mirrored={!$localMedia.screenSharing}
-      audioEnabled={$localMedia.audioEnabled}
-      videoEnabled={$localMedia.videoEnabled || $localMedia.screenSharing}
-      isLocal={true}
-      isScreenShare={$localMedia.screenSharing}
-      on:click={() => handleTileClick(localPubkey)}
-    />
-
-    <!-- Remote participants -->
+  <div class="video-grid" style="--cols: {cols}; --rows: {rows}; --total: {totalCount};">
+    {@render localTile()}
     {#each participantList as participant (participant.pubkey)}
-      <VideoTile
-        stream={participant.stream}
-        pubkey={participant.pubkey}
-        muted={false}
-        mirrored={false}
-        audioEnabled={participant.audioEnabled}
-        videoEnabled={participant.videoEnabled || participant.screenSharing}
-            isScreenShare={participant.screenSharing}
-        connectionState={participant.connectionState}
-        isLocal={false}
-        on:click={() => handleTileClick(participant.pubkey)}
-      />
+      {@render remoteTile(participant)}
     {/each}
   </div>
 {/if}
 
 <style>
-  /* Grid mode styles */
-  .video-grid {
+  .video-grid,
+  .focus-layout {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-content: center;
-    gap: 1rem;
     width: 100%;
     height: 100%;
     padding: 1rem;
@@ -179,8 +101,15 @@
     padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
     padding-left: calc(1rem + env(safe-area-inset-left, 0px));
     padding-right: calc(1rem + env(safe-area-inset-right, 0px));
+    gap: 1rem;
     overflow: hidden;
     box-sizing: border-box;
+  }
+
+  .video-grid {
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: center;
   }
 
   .video-grid > :global(*) {
@@ -195,20 +124,8 @@
     }
   }
 
-  /* Focus mode styles */
   .focus-layout {
-    display: flex;
     flex-direction: column;
-    width: 100%;
-    height: 100%;
-    padding: 1rem;
-    padding-top: calc(1rem + env(safe-area-inset-top, 0px));
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-    padding-left: calc(1rem + env(safe-area-inset-left, 0px));
-    padding-right: calc(1rem + env(safe-area-inset-right, 0px));
-    gap: 1rem;
-    overflow: hidden;
-    box-sizing: border-box;
   }
 
   .focused-tile {
@@ -239,7 +156,6 @@
     height: 90px;
   }
 
-  /* Mobile: smaller strip tiles */
   @media (max-width: 639px) {
     .tile-strip > :global(*) {
       width: 120px;

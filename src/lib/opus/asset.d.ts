@@ -1,4 +1,4 @@
-declare module '*.wasm?url&inline' {
-  const dataUrl: string
-  export default dataUrl
+declare module '*.wasm?url' {
+  const assetUrl: string
+  export default assetUrl
 }

@@ -21,6 +21,8 @@
   let copied = false
   let copiedResetTimer: CopyResetTimer = null
   let chatOpen = false
+  let left = false
+  let destroyed = false
 
   function handleKeydown(e: KeyboardEvent) {
     // Don't trigger shortcuts when typing in chat
@@ -43,21 +45,24 @@
     try {
       // Join the meeting room (camera/mic start off, user enables when ready)
       await joinRoom(meeting.privkeyHex)
-
-      joining = false
+      if (!destroyed) joining = false
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to join meeting'
-      joining = false
+      if (!destroyed) {
+        error = e instanceof Error ? e.message : 'Failed to join meeting'
+        joining = false
+      }
     }
   })
 
   onDestroy(() => {
+    destroyed = true
     window.removeEventListener('keydown', handleKeydown)
     clearCopyReset(copiedResetTimer)
-    leaveRoom()
+    if (!left) void leaveRoom()
   })
 
   async function handleLeave() {
+    left = true
     await leaveRoom()
     dispatch('leave')
   }

@@ -5,6 +5,7 @@ import { WebRtcTransport } from '@fips/transport-webrtc'
 import { WebSocketTransport } from '@fips/transport-websocket'
 import { createNostrIdentitySignerFromSecretKey } from '@iris/identity/signers'
 import { getProfileDisplayName } from '@iris/svelte-ui/profile'
+import { hexToBytes } from 'nostr-tools/utils'
 import { getNostrRuntime } from './nostr'
 import { identity } from './identity'
 import { createMeetingEncryption } from './encryption'
@@ -45,20 +46,39 @@ const seeds = import.meta.env.VITE_FIPS_SEEDS?.split(',').filter(Boolean) ?? ['w
 let generation = 0
 let active: {
   stopNode: () => Promise<void>; transport: MeetingTransport; media: MeetingMedia
-  roomPubkey: string; discovery?: ReturnType<typeof startMeetingDiscovery>; interval?: ReturnType<typeof setInterval>
+  roomPubkey: string; discovery?: ReturnType<typeof startMeetingDiscovery>
+  interval?: ReturnType<typeof setInterval>; presenceTimer?: ReturnType<typeof setTimeout>
+  onPageHide?: () => void
 } | undefined
 
 function report(error: unknown) { meetingError.set(error instanceof Error ? error.message : String(error)) }
-function updateParticipant(peer: string, update: (participant: Participant) => void) {
-  participants.update(map => {
-    const participant = [...map.values()].find(p => p.fipsPeer === canonicalPeer(peer))
-    if (participant) update(participant)
-    return new Map(map)
-  })
+function findParticipant(map: Map<string, Participant>, peer: string) {
+  const canonical = canonicalPeer(peer)
+  for (const participant of map.values()) if (participant.fipsPeer === canonical) return participant
+  return undefined
+}
+function updateParticipant(peer: string, patch: Partial<Participant>) {
+  const map = get(participants)
+  const participant = findParticipant(map, peer)
+  if (!participant) return
+  let changed = false
+  for (const [key, value] of Object.entries(patch) as Array<[keyof Participant, Participant[keyof Participant]]>) {
+    if (participant[key] !== value) { changed = true; break }
+  }
+  if (!changed) return
+  Object.assign(participant, patch)
+  participants.set(new Map(map))
 }
 function removeParticipant(peer: string) {
   active?.transport.removePeer(peer); active?.media.removePeer(peer)
-  participants.update(map => new Map([...map].filter(([, p]) => p.fipsPeer !== canonicalPeer(peer))))
+  const map = get(participants)
+  const removed = findParticipant(map, peer)
+  if (removed) {
+    const next = new Map(map)
+    next.delete(removed.pubkey)
+    participants.set(next)
+    if (get(focusedPubkey) === removed.pubkey) focusedPubkey.set(null)
+  }
   active?.discovery?.refreshPeers()
 }
 function persistMediaPrefs() {
@@ -126,11 +146,6 @@ async function toggle(kind: 'audio' | 'video') {
 }
 export const toggleAudio = () => toggle('audio')
 export const toggleVideo = () => toggle('video')
-export async function getLocalStream(video = true, audio = true): Promise<MediaStream> {
-  if (audio) await setDevice('audio')
-  if (video) await setDevice('video')
-  return get(localMedia).stream ?? new MediaStream()
-}
 export function stopLocalStream() {
   const media = get(localMedia)
   media.screenStream?.getTracks().forEach(t => { t.onended = null; t.stop() })
@@ -186,7 +201,7 @@ export async function joinRoom(secret: string) {
   if (!current) throw new Error('Not logged in')
   meetingError.set('')
   const encryption = createMeetingEncryption(secret)
-  const signer = createNostrIdentitySignerFromSecretKey(Uint8Array.from(secret.match(/../g)!, b => parseInt(b, 16)))
+  const signer = createNostrIdentitySignerFromSecretKey(hexToBytes(secret))
   const fipsIdentity = await generateIdentity()
   if (run !== generation) return
   const peer = toHex(fipsIdentity.publicKey)
@@ -250,16 +265,16 @@ export async function joinRoom(secret: string) {
   const transport: MeetingTransport = new MeetingTransport(node, encryption.roomPubkey.slice(0, 32), {
     connected(peer) {
       if (run !== generation) return
-      updateParticipant(peer, p => { p.connectionState = 'connected' })
+      updateParticipant(peer, { connectionState: 'connected' })
       media.requestKeyframe()
     },
     heartbeat: connectDirect,
-    failed(peer) { if (run === generation) updateParticipant(peer, p => { p.connectionState = 'failed' }) },
+    failed(peer) { if (run === generation) updateParticipant(peer, { connectionState: 'failed' }) },
     leave(peer) { if (run === generation) { retireDirect(peer); removeParticipant(peer) } },
-    state(peer, state) { if (run === generation) updateParticipant(peer, p => Object.assign(p, state)) },
+    state(peer, state) { if (run === generation) updateParticipant(peer, state) },
     message(peer, message) {
       if (run !== generation) return
-      const sender = [...get(participants).values()].find(p => p.fipsPeer === peer)
+      const sender = findParticipant(get(participants), peer)
       if (!sender) return
       chatMessages.update(messages => [...messages, { ...message, from: sender.pubkey, fromName: sender.displayName }])
       unreadCount.update(n => n + 1)
@@ -272,19 +287,33 @@ export async function joinRoom(secret: string) {
   let media: MeetingMedia
   try {
     media = await MeetingMedia.open((frame, allowed) => transport.sendMedia(frame, allowed),
-      (peer, stream) => { if (run === generation) updateParticipant(peer, p => { p.stream = stream }) },
+      (peer, stream) => { if (run === generation) updateParticipant(peer, { stream }) },
       peer => transport.requestKeyframe(peer), report)
     if (run !== generation) { media.close(); await transport.close(); await stopNode(); return }
-    active = { stopNode, transport, media, roomPubkey: encryption.roomPubkey }
+    const onPageHide = () => { transport.sendLeave() }
+    window.addEventListener('pagehide', onPageHide)
+    active = { stopNode, transport, media, roomPubkey: encryption.roomPubkey, onPageHide }
     await node.start()
     if (run !== generation) { await stopNode(); return }
     const room = active!
     const runtime = getNostrRuntime()
+    let lastPresenceAt = 0
     const sendPresence = async () => {
       if (run !== generation) return
+      lastPresenceAt = performance.now()
       const now = Math.floor(Date.now() / 1000)
       const event = await signer.signEvent({ kind: MEETING_PRESENCE_KIND, created_at: now, tags: [['expiration', String(now + 60)]], content: encryption.encrypt(JSON.stringify({ type: 'fips-presence', binding })) })
       if (run === generation) void runtime.publish(event, PRESENCE_PUBLISH_OPTIONS).catch(() => {})
+    }
+    // Coalesce burst peer discoveries into one reply while still responding promptly to late joiners.
+    const schedulePresence = () => {
+      if (run !== generation || room.presenceTimer !== undefined) return
+      const wait = Math.max(0, 150 - (performance.now() - lastPresenceAt))
+      if (wait === 0) { void sendPresence().catch(() => {}); return }
+      room.presenceTimer = setTimeout(() => {
+        room.presenceTimer = undefined
+        void sendPresence().catch(() => {})
+      }, Math.ceil(wait))
     }
     const joinedAt = Math.floor(Date.now() / 1000) - 5
     const revisions = new Map<string, number>()
@@ -307,7 +336,7 @@ export async function joinRoom(secret: string) {
             retireDirect(existing.fipsPeer)
             removeParticipant(existing.fipsPeer)
           }
-          if ([...get(participants).values()].some(p => p.fipsPeer === peer)) return
+          if (findParticipant(get(participants), peer)) return
           revisions.set(owner, data.issuedAt)
           participants.update(map => new Map(map).set(owner, { pubkey: owner, displayName: data.name, fipsPeer: peer, stream: null, audioEnabled: false, videoEnabled: false, screenSharing: false, connectionState: 'connecting' }))
           addProfileToCache({ pubkey: owner, name: data.name, display_name: data.name })
@@ -318,7 +347,7 @@ export async function joinRoom(secret: string) {
           connectDirect(peer)
           room.discovery?.refreshPeers()
           await media.addPeer(peer)
-          if (run === generation) await sendPresence()
+          if (run === generation) schedulePresence()
         } catch { /* Ignore malformed or unrelated discovery messages. */ }
       },
     })
@@ -334,7 +363,10 @@ export async function leaveRoom() {
   const room = active
   active = undefined
   if (room) {
-    clearInterval(room.interval); room.media.close()
+    if (room.onPageHide) window.removeEventListener('pagehide', room.onPageHide)
+    clearInterval(room.interval)
+    if (room.presenceTimer !== undefined) clearTimeout(room.presenceTimer)
+    room.media.close()
   }
   stopLocalStream(); participants.set(new Map()); chatMessages.set([]); unreadCount.set(0); focusedPubkey.set(null); meetingError.set('')
   if (room) {

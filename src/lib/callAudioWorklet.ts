@@ -5,8 +5,12 @@ class CallAudio extends AudioWorkletProcessor {
     super(); this.capture = new Float32Array(960); this.captureIndex = 0;
     this.captured = []; this.capturePending = false; this.rendered = 0;
     this.playoutPending = false; this.playoutAt = undefined;
-    this.queue = []; this.offset = 0; this.queued = 0; this.started = false; this.active = false;
+    this.queue = []; this.offset = 0; this.queued = 0; this.started = false; this.active = false; this.stopped = false;
     this.port.onmessage = event => {
+      if (event.data.stop) {
+        this.stopped = true; this.active = false; this.captured = []; this.queue = []; this.queued = 0; this.offset = 0;
+        return;
+      }
       if (event.data.active !== undefined && this.active !== event.data.active) {
         this.active = event.data.active; this.captureIndex = 0; this.captured = [];
       }
@@ -19,16 +23,17 @@ class CallAudio extends AudioWorkletProcessor {
     };
   }
   sendCapture() {
-    if (this.capturePending || !this.captured.length) return;
+    if (this.stopped || this.capturePending || !this.captured.length) return;
     const frame = this.captured.shift(); this.capturePending = true;
     this.port.postMessage(frame, [frame.pcm.buffer]);
   }
   requestPlayout() {
-    if (this.playoutPending || this.playoutAt === undefined) return;
+    if (this.stopped || this.playoutPending || this.playoutAt === undefined) return;
     this.playoutPending = true;
     this.port.postMessage({ playout: this.playoutAt }); this.playoutAt = undefined;
   }
   process(inputs, outputs) {
+    if (this.stopped) return false;
     const input = inputs[0]?.[0];
     if (input && this.active) for (let i = 0; i < input.length; i++) {
       this.capture[this.captureIndex++] = input[i];

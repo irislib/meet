@@ -17,6 +17,8 @@
   const dispatch = createEventDispatcher<{ click: { pubkey: string } }>()
 
   let videoElement: HTMLVideoElement
+  let appliedSinkId: string | null = null
+  let appliedSinkElement: HTMLVideoElement | null = null
 
   function handleClick() {
     dispatch('click', { pubkey })
@@ -28,11 +30,15 @@
     videoElement.srcObject = stream
   }
 
-  // Apply audio output device (setSinkId) to remote video elements
-  $: if (videoElement && !isLocal && $localMedia.audioOutputDeviceId) {
-    const el = videoElement as any
+  // Apply audio output device (setSinkId) only when the device or element changes.
+  $: sinkId = !isLocal ? $localMedia.audioOutputDeviceId : null
+  $: if (videoElement && sinkId && (sinkId !== appliedSinkId || videoElement !== appliedSinkElement)) {
+    const el = videoElement as HTMLVideoElement & { setSinkId?: (id: string) => Promise<void> }
     if (typeof el.setSinkId === 'function') {
-      el.setSinkId($localMedia.audioOutputDeviceId).catch((err: Error) => {
+      appliedSinkId = sinkId
+      appliedSinkElement = videoElement
+      el.setSinkId(sinkId).catch((err: Error) => {
+        appliedSinkId = null
         console.warn('Failed to set audio output device:', err)
       })
     }

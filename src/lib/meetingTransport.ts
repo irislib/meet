@@ -30,6 +30,7 @@ interface Peer {
   heard: number
   connected: boolean
   failed: boolean
+  remoteVideo: boolean
   seen: Set<string>
   adaptation: CallAdaptation
   videoSending: boolean
@@ -37,6 +38,7 @@ interface Peer {
   feedbackSequence: number
   receivedFrames: number
   receivedBytes: number
+  pendingKey?: { packets: Uint8Array[]; allowed: () => boolean }
 }
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
@@ -61,8 +63,8 @@ export class MeetingTransport {
     const peer = canonicalPeer(address)
     if (!peer || this.stopped || this.peers.has(peer)) return
     this.peers.set(peer, {
-      receiver: new CallMediaReceiver(), heard: Date.now(), connected: false, failed: false, seen: new Set(),
-      adaptation: new CallAdaptation(callEncoding({}).maxBitrate), videoSending: false,
+      receiver: new CallMediaReceiver(), heard: Date.now(), connected: false, failed: false, remoteVideo: false,
+      seen: new Set(), adaptation: new CallAdaptation(callEncoding({}).maxBitrate), videoSending: false,
       feedbackAt: performance.now(), feedbackSequence: 0, receivedFrames: 0, receivedBytes: 0,
     })
     this.send(peer, { type: 'hello', state: this.state })
@@ -80,7 +82,8 @@ export class MeetingTransport {
       for (const peer of this.peers.values()) peer.adaptation.begin()
     }
     this.state = state
-    for (const peer of this.peers.keys()) this.send(peer, { type: 'state', state })
+    const payload = this.packet({ type: 'state', state })
+    for (const peer of this.peers.keys()) this.sendBytes(peer, payload)
   }
   chat(text: string): TransportChat {
     text = text.trim()
@@ -94,9 +97,18 @@ export class MeetingTransport {
     return message
   }
   requestKeyframe(peer: string) { this.send(peer, { type: 'keyframe' }) }
+  sendLeave() {
+    if (this.stopped || !this.peers.size) return []
+    const payload = this.packet({ type: 'leave' })
+    return [...this.peers.keys()].map(dst => this.endpoint.sendDatagram({ dst, srcPort: MEETING_PORT, dstPort: MEETING_PORT, payload }))
+  }
   async sendMedia(frame: MediaFrame, allowed: () => boolean = () => true) {
     if (this.stopped || !allowed()) return
+    let hasConnected = false
+    for (const state of this.peers.values()) { if (state.connected) { hasConnected = true; break } }
+    if (!hasConnected) return
     const packets = encodeCallMedia(this.room, frame)
+    if (!packets.length) return
     await Promise.allSettled([...this.peers].map(async ([peer, state]) => {
       if (!state.connected) return
       if (frame.kind === 2) {
@@ -104,12 +116,21 @@ export class MeetingTransport {
         state.adaptation.sentFrame(frame.seq)
       }
       const key = `${peer}:${frame.kind}`
-      if (this.mediaBusy.has(key)) return // Keep slow routes from accumulating stale media.
+      if (this.mediaBusy.has(key)) {
+        // Never lose a keyframe behind a slow delta frame; deliver it as soon as the route frees.
+        if (frame.kind === 2 && frame.key) state.pendingKey = { packets, allowed }
+        return
+      }
       this.mediaBusy.add(key)
       try {
-        for (const payload of packets) {
-          if (this.stopped || !this.peers.has(peer) || !allowed()) return
-          await this.endpoint.sendDatagram({ dst: peer, srcPort: MEETING_PORT, dstPort: MEETING_PORT, payload })
+        let batch: { packets: Uint8Array[]; allowed: () => boolean } | undefined = { packets, allowed }
+        while (batch) {
+          for (const payload of batch.packets) {
+            if (this.stopped || !this.peers.has(peer) || !batch.allowed()) return
+            await this.endpoint.sendDatagram({ dst: peer, srcPort: MEETING_PORT, dstPort: MEETING_PORT, payload })
+          }
+          batch = frame.kind === 2 ? state.pendingKey : undefined
+          if (batch) state.pendingKey = undefined
         }
       } finally { this.mediaBusy.delete(key) }
     }))
@@ -139,6 +160,7 @@ export class MeetingTransport {
         case 'hello':
         case 'state':
           if (!p.state || ['audioEnabled', 'videoEnabled', 'screenSharing'].some(k => typeof p.state[k] !== 'boolean')) return
+          state.remoteVideo = p.state.videoEnabled || p.state.screenSharing
           this.heard(peer, state)
           this.callbacks.state?.(peer, p.state)
           if (p.type === 'hello') {
@@ -185,31 +207,41 @@ export class MeetingTransport {
   private sendingVideo() { return this.state.videoEnabled || this.state.screenSharing }
   private updateBitrate() {
     // Encode once for the group at the rate supported by every connected receiver.
-    const targets = [...this.peers.values()].filter(p => p.connected).map(p => p.adaptation.target)
-    const next = targets.length ? Math.min(...targets) : 1_200_000
+    let next = Infinity
+    for (const peer of this.peers.values()) {
+      if (peer.connected && peer.adaptation.target < next) next = peer.adaptation.target
+    }
+    if (next === Infinity) next = 1_200_000
     if (next !== this.targetBitrate) { this.targetBitrate = next; this.callbacks.bitrate?.(next) }
   }
   private tick() {
     this.tickCount++
+    const wallNow = Date.now()
     for (const [id, item] of this.pending) {
       if (!item.waiting.size) { this.pending.delete(id); continue }
-      if (Date.now() >= item.expires) {
+      if (wallNow >= item.expires) {
         this.pending.delete(id); this.callbacks.error?.('A message could not reach everyone. Try sending it again.')
       } else for (const peer of item.waiting) this.sendBytes(peer, item.payload)
     }
+    const perfNow = performance.now()
+    let helloPayload: Uint8Array | undefined
     for (const [peer, state] of this.peers) {
-      const now = performance.now(), interval = Math.round(now - state.feedbackAt)
+      const interval = Math.round(perfNow - state.feedbackAt)
       if (interval >= 200) {
-        if (interval <= 5000) this.send(peer, {
-          type: 'feedback', feedback_seq: state.feedbackSequence++ >>> 0,
-          video_seq: state.receiver.highestVideo, received_frames: state.receivedFrames,
-          received_bytes: state.receivedBytes, interval_ms: interval,
-        })
-        state.feedbackAt = now; state.receivedFrames = 0; state.receivedBytes = 0
+        if (state.connected && (state.remoteVideo || state.receivedFrames > 0) && interval <= 5000) {
+          this.send(peer, {
+            type: 'feedback', feedback_seq: state.feedbackSequence++ >>> 0,
+            video_seq: state.receiver.highestVideo, received_frames: state.receivedFrames,
+            received_bytes: state.receivedBytes, interval_ms: interval,
+          })
+        }
+        state.feedbackAt = perfNow; state.receivedFrames = 0; state.receivedBytes = 0
       }
-      if (this.sendingVideo() && state.videoSending && state.connected) state.adaptation.tick(now)
-      if (!state.connected || this.tickCount % 5 === 0) this.send(peer, { type: 'hello', state: this.state })
-      if (!state.failed && Date.now() - state.heard > 15000) {
+      if (this.sendingVideo() && state.videoSending && state.connected) state.adaptation.tick(perfNow)
+      if (!state.connected || this.tickCount % 5 === 0) {
+        this.sendBytes(peer, helloPayload ??= this.packet({ type: 'hello', state: this.state }))
+      }
+      if (!state.failed && wallNow - state.heard > 15000) {
         state.connected = false
         state.failed = true
         this.callbacks.failed?.(peer)
@@ -219,10 +251,10 @@ export class MeetingTransport {
   }
   async close() {
     if (this.stopped) return
-    const payload = this.packet({ type: 'leave' })
-    const leaving = [...this.peers.keys()].map(dst => this.endpoint.sendDatagram({ dst, srcPort: MEETING_PORT, dstPort: MEETING_PORT, payload }))
+    const leaving = this.sendLeave()
     this.stopped = true
     clearInterval(this.timer); this.unregister(); this.pending.clear(); this.peers.clear()
+    if (!leaving.length) return
     let deadline: ReturnType<typeof setTimeout> | undefined
     try {
       // Give established routes a chance to deliver leave, without waiting for

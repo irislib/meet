@@ -1,22 +1,10 @@
 import { requestBrowserSigner, restoreBrowserSigner, isBrowserSignerSession, type BrowserSignerSession } from '@iris/identity/browserSigner'
 import { createNostrIdentitySignerFromSecretKey, createNostrIdentitySignerFromNip07, type NostrIdentityEventSigner } from '@iris/identity/signers'
-import { setNostrSigner } from './nostr'
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
-import { writable, derived, get } from 'svelte/store'
+import { bytesToHex, hexToBytes } from 'nostr-tools/utils'
+import { writable, get } from 'svelte/store'
+import { setNostrSigner } from './nostr'
 import { saveLocalProfile, clearLocalProfile, getLocalProfile } from './profile'
-
-// Helper functions
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2)
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
-  }
-  return bytes
-}
 
 export interface Identity {
   pubkey: string
@@ -30,50 +18,22 @@ const IDENTITY_STORAGE_KEY = 'iris-meet-identity'
 
 export const identity = writable<Identity | null>(null)
 
-export const isLoggedIn = derived(identity, $identity => $identity !== null)
-
-export function parseNsecFromHash(): string | null {
-  const hash = window.location.hash
-  if (!hash || hash.length < 2) return null
-
-  const nsec = hash.slice(1)
-  if (!nsec.startsWith('nsec1')) return null
-
-  try {
-    const decoded = nip19.decode(nsec)
-    if (decoded.type === 'nsec') {
-      return bytesToHex(decoded.data as Uint8Array)
-    }
-  } catch {
-    return null
-  }
-  return null
-}
-
 export function generateNewIdentity(): { privkey: string; pubkey: string; nsec: string } {
   const privkeyBytes = generateSecretKey()
-  const privkey = bytesToHex(privkeyBytes)
-  const pubkey = getPublicKey(privkeyBytes)
-  const nsec = nip19.nsecEncode(privkeyBytes)
-  return { privkey, pubkey, nsec }
+  return {
+    privkey: bytesToHex(privkeyBytes),
+    pubkey: getPublicKey(privkeyBytes),
+    nsec: nip19.nsecEncode(privkeyBytes),
+  }
 }
 
 export function loadStoredIdentity(): string | null {
-  try {
-    return localStorage.getItem(IDENTITY_STORAGE_KEY)
-  } catch {
-    return null
-  }
+  try { return localStorage.getItem(IDENTITY_STORAGE_KEY) } catch { return null }
 }
 
 export function saveIdentity(privkeyHex: string): boolean {
-  try {
-    localStorage.setItem(IDENTITY_STORAGE_KEY, privkeyHex)
-    return true
-  } catch {
-    console.warn('Failed to save identity to localStorage')
-    return false
-  }
+  try { localStorage.setItem(IDENTITY_STORAGE_KEY, privkeyHex); return true }
+  catch { console.warn('Failed to save identity to localStorage'); return false }
 }
 
 export function getLocalProfileNsec(pubkey: string): string | null {
@@ -92,38 +52,24 @@ export function getLocalProfileNsec(pubkey: string): string | null {
 }
 
 export function clearStoredIdentity(): void {
-  try {
-    localStorage.removeItem(IDENTITY_STORAGE_KEY)
-  } catch {
-    console.warn('Failed to clear identity from localStorage')
-  }
+  try { localStorage.removeItem(IDENTITY_STORAGE_KEY) }
+  catch { console.warn('Failed to clear identity from localStorage') }
+}
+
+function activateIdentity(next: Identity) {
+  setNostrSigner(next.signer)
+  identity.set(next)
+  if (next.displayName) saveLocalProfile(next.pubkey, next.displayName)
 }
 
 export async function loginWithPrivkey(privkeyHex: string, displayName: string | null = null): Promise<void> {
   const signer = createNostrIdentitySignerFromSecretKey(hexToBytes(privkeyHex))
   const pubkey = await signer.getPublicKey()
-
-  setNostrSigner(signer)
-
-  identity.set({
-    pubkey,
-    signer,
-    displayName,
-    isNip07: false,
-    canCopySecretKey: saveIdentity(privkeyHex),
-  })
-
-  // Save local profile rumor for display in UI and sending to peers
-  if (displayName) {
-    saveLocalProfile(pubkey, displayName)
-  }
+  activateIdentity({ pubkey, signer, displayName, isNip07: false, canCopySecretKey: saveIdentity(privkeyHex) })
 }
 
 function activateRemoteSigner(session: BrowserSignerSession, displayName: string | null): void {
-  const signer = restoreBrowserSigner(session)
-  setNostrSigner(signer)
-  identity.set({ pubkey: session.pubkey, signer, displayName, isNip07: false, canCopySecretKey: false })
-  if (displayName) saveLocalProfile(session.pubkey, displayName)
+  activateIdentity({ pubkey: session.pubkey, signer: restoreBrowserSigner(session), displayName, isNip07: false, canCopySecretKey: false })
 }
 
 export async function loginWithRemoteSigner(displayName: string | null): Promise<boolean> {
@@ -135,80 +81,50 @@ export async function loginWithRemoteSigner(displayName: string | null): Promise
 }
 
 export async function loginWithNip07(displayName: string | null = null): Promise<void> {
-  if (!window.nostr) {
-    throw new Error('No NIP-07 extension found')
-  }
-
+  if (!window.nostr) throw new Error('No NIP-07 extension found')
   const signer = createNostrIdentitySignerFromNip07(window.nostr)
   const pubkey = await signer.getPublicKey()
-
   setNostrSigner(signer)
-
-  identity.set({
-    pubkey,
-    signer,
-    displayName,
-    isNip07: true,
-    canCopySecretKey: false,
-  })
-
-  // Save marker to remember NIP-07 login
+  identity.set({ pubkey, signer, displayName, isNip07: true, canCopySecretKey: false })
   saveIdentity('nip07')
 }
 
 export async function autoLogin(displayName: string | null = null): Promise<boolean> {
-  // Check for stored identity (user's own identity, NOT from URL hash)
-  // URL hash contains meeting nsec, not user identity
+  // Check stored user identity (URL hash holds the meeting key, not the user identity).
   const storedValue = loadStoredIdentity()
-  if (storedValue) {
-    // Restore displayName from local profile if not provided
-    if (!displayName) {
-      const localProfile = getLocalProfile()
-      displayName = localProfile?.display_name || localProfile?.name || null
-    }
-
-    if (storedValue.startsWith('{')) {
-      try {
-        const session: unknown = JSON.parse(storedValue)
-        if (isBrowserSignerSession(session)) {
-          activateRemoteSigner(session, displayName)
-          return true
-        }
-      } catch { /* Reopen account selection when the stored session is invalid. */ }
-      clearStoredIdentity()
-      return false
-    }
-    if (storedValue === 'nip07') {
-      // Try to re-authenticate with NIP-07 extension
-      if (hasNip07()) {
-        try {
-          await loginWithNip07(displayName)
-          return true
-        } catch {
-          // Extension may have been removed or user denied access
-          clearStoredIdentity()
-          return false
-        }
-      } else {
-        // Extension no longer available
-        clearStoredIdentity()
-        return false
-      }
-    } else {
-      // It's a privkey
-      await loginWithPrivkey(storedValue, displayName)
-      return true
-    }
+  if (!storedValue) return false
+  if (!displayName) {
+    const localProfile = getLocalProfile()
+    displayName = localProfile?.display_name || localProfile?.name || null
   }
-
-  return false
+  if (storedValue.startsWith('{')) {
+    try {
+      const session: unknown = JSON.parse(storedValue)
+      if (isBrowserSignerSession(session)) {
+        activateRemoteSigner(session, displayName)
+        return true
+      }
+    } catch { /* Reopen account selection when the stored session is invalid. */ }
+    clearStoredIdentity()
+    return false
+  }
+  if (storedValue === 'nip07') {
+    if (hasNip07()) {
+      try { await loginWithNip07(displayName); return true } catch { /* Extension denied or removed. */ }
+    }
+    clearStoredIdentity()
+    return false
+  }
+  await loginWithPrivkey(storedValue, displayName)
+  return true
 }
 
 export function logout(): void {
+  const pubkey = get(identity)?.pubkey
   setNostrSigner(undefined)
   identity.set(null)
   clearStoredIdentity()
-  clearLocalProfile()
+  clearLocalProfile(pubkey)
 }
 
 export function hasNip07(): boolean {

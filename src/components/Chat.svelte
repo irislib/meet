@@ -1,26 +1,44 @@
 <script lang="ts">
-  import { onMount, afterUpdate } from 'svelte'
+  import { tick } from 'svelte'
   import { chatMessages, sendChatMessage, clearUnreadCount, type ChatMessage } from '../lib/meetingSession'
   import { identity } from '../lib/identity'
 
   export let isOpen = false
 
   let messageInput = ''
-  let messagesContainer: HTMLDivElement
-  let inputEl: HTMLInputElement
+  let messagesContainer: HTMLDivElement | undefined
+  let inputEl: HTMLInputElement | undefined
+  let wasOpen = false
+  let lastCount = 0
 
-  $: if (isOpen) {
-    clearUnreadCount()
-    // Focus input when opening
-    setTimeout(() => inputEl?.focus(), 100)
+  function scrollToBottom() {
+    void tick().then(() => {
+      const container = messagesContainer
+      if (container) container.scrollTop = container.scrollHeight
+    })
   }
 
-  afterUpdate(() => {
-    // Scroll to bottom when new messages arrive
-    if (messagesContainer) {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight
+  function onOpened() {
+    clearUnreadCount()
+    void tick().then(() => {
+      inputEl?.focus()
+      const container = messagesContainer
+      if (container) container.scrollTop = container.scrollHeight
+    })
+  }
+
+  $: if (isOpen !== wasOpen) {
+    wasOpen = isOpen
+    if (isOpen) {
+      lastCount = $chatMessages.length
+      onOpened()
     }
-  })
+  }
+
+  $: if (isOpen && $chatMessages.length !== lastCount) {
+    lastCount = $chatMessages.length
+    scrollToBottom()
+  }
 
   function handleSend() {
     if (!messageInput.trim()) return
@@ -44,49 +62,25 @@
 
   function getBubbleClass(isOwn: boolean, isFirst: boolean, isLast: boolean): string {
     const base = isOwn ? 'bg-primary text-white' : 'bg-surface-light text-gray-200'
-
-    if (isFirst && isLast) {
-      return `${base} rounded-2xl`
-    }
-    if (isFirst) {
-      return isOwn
-        ? `${base} rounded-t-2xl rounded-bl-2xl rounded-br-sm`
-        : `${base} rounded-t-2xl rounded-br-2xl rounded-bl-sm`
-    }
-    if (isLast) {
-      return isOwn
-        ? `${base} rounded-b-2xl rounded-tl-2xl rounded-tr-sm`
-        : `${base} rounded-b-2xl rounded-tr-2xl rounded-tl-sm`
-    }
-    return isOwn
-      ? `${base} rounded-l-2xl rounded-r-sm`
-      : `${base} rounded-r-2xl rounded-l-sm`
+    if (isFirst && isLast) return `${base} rounded-2xl`
+    if (isFirst) return `${base} rounded-t-2xl ${isOwn ? 'rounded-bl-2xl rounded-br-sm' : 'rounded-br-2xl rounded-bl-sm'}`
+    if (isLast) return `${base} rounded-b-2xl ${isOwn ? 'rounded-tl-2xl rounded-tr-sm' : 'rounded-tr-2xl rounded-tl-sm'}`
+    return `${base} ${isOwn ? 'rounded-l-2xl rounded-r-sm' : 'rounded-r-2xl rounded-l-sm'}`
   }
 
-  // Simple URL regex
-  const urlRegex = /(https?:\/\/[^\s<]+[^\s<.,;:!?"'\])>])/g
+  const URL_RE = /(https?:\/\/[^\s<]+[^\s<.,;:!?"'\])>])/g
 
-  function parseMessageWithLinks(text: string): Array<{ type: 'text' | 'link', content: string }> {
-    const parts: Array<{ type: 'text' | 'link', content: string }> = []
+  function parseMessageWithLinks(text: string): Array<{ type: 'text' | 'link'; content: string }> {
+    const parts: Array<{ type: 'text' | 'link'; content: string }> = []
     let lastIndex = 0
-    let match
-
-    while ((match = urlRegex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push({ type: 'text', content: text.slice(lastIndex, match.index) })
-      }
+    for (const match of text.matchAll(URL_RE)) {
+      const start = match.index ?? 0
+      if (start > lastIndex) parts.push({ type: 'text', content: text.slice(lastIndex, start) })
       parts.push({ type: 'link', content: match[0] })
-      lastIndex = urlRegex.lastIndex
+      lastIndex = start + match[0].length
     }
-
-    if (lastIndex < text.length) {
-      parts.push({ type: 'text', content: text.slice(lastIndex) })
-    }
-
-    // Reset regex state
-    urlRegex.lastIndex = 0
-
-    return parts.length > 0 ? parts : [{ type: 'text', content: text }]
+    if (lastIndex < text.length) parts.push({ type: 'text', content: text.slice(lastIndex) })
+    return parts.length ? parts : [{ type: 'text', content: text }]
   }
 </script>
 

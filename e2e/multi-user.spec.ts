@@ -342,4 +342,39 @@ test.describe('Multi-user Meeting', () => {
       await context.close();
     }
   });
+
+  test('exits focus mode when the focused participant leaves', async ({ browser }) => {
+    const context1 = await browser.newContext({ permissions: ['camera', 'microphone'] });
+    const context2 = await browser.newContext({ permissions: ['camera', 'microphone'] });
+    const page1 = await context1.newPage();
+    const page2 = await context2.newPage();
+    setupPageErrorHandler(page1);
+    setupPageErrorHandler(page2);
+
+    try {
+      await page1.goto('/');
+      await page1.getByPlaceholder('Name').fill('Alice');
+      await page1.getByRole('button', { name: 'Join', exact: true }).click();
+      await page1.getByRole('button', { name: 'Start Meeting' }).click();
+      await expect(page1.getByTitle('Leave meeting')).toBeVisible({ timeout: 15000 });
+
+      await page2.goto(page1.url());
+      await page2.getByPlaceholder('Name').fill('Bob');
+      await page2.getByRole('button', { name: 'Join Meeting', exact: true }).click();
+      await expect(page1.getByTestId('video-tile')).toHaveCount(2, { timeout: 15000 });
+
+      // Focus Bob's tile on Alice's screen
+      await page1.getByTestId('video-tile').filter({ hasText: 'Bob' }).click();
+      await expect(page1.locator('.focus-layout')).toBeVisible();
+
+      // Bob leaves -> Alice should automatically return to grid mode (not an empty focused tile)
+      await page2.getByTitle('Leave meeting').click();
+      await expect(page1.getByTestId('video-tile')).toHaveCount(1, { timeout: 15000 });
+      await expect(page1.locator('.focus-layout')).toHaveCount(0);
+      await expect(page1.locator('.video-grid')).toBeVisible();
+    } finally {
+      await context1.close();
+      await context2.close();
+    }
+  });
 });

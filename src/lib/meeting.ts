@@ -1,18 +1,8 @@
 import { writable } from 'svelte/store'
 import { generateSecretKey, getPublicKey } from 'nostr-tools'
+import { bytesToHex, hexToBytes } from 'nostr-tools/utils'
 
-// Helper functions
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2)
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
-  }
-  return bytes
-}
+const HEX_KEY_RE = /^[0-9a-fA-F]{64}$/
 
 export interface Meeting {
   id: string
@@ -23,70 +13,44 @@ export interface Meeting {
 
 export const currentMeeting = writable<Meeting | null>(null)
 
-// Generate a new meeting with its own identity
-export function createMeeting(): Meeting {
-  const privkeyBytes = generateSecretKey()
+function meetingFromBytes(privkeyBytes: Uint8Array, privkeyHex = bytesToHex(privkeyBytes)): Meeting {
   const pubkey = getPublicKey(privkeyBytes)
-  const privkeyHex = bytesToHex(privkeyBytes)
+  return { id: pubkey.slice(0, 12), privkeyHex, pubkey, createdAt: new Date() }
+}
 
-  const meeting: Meeting = {
-    id: pubkey.slice(0, 12),
-    privkeyHex,
-    pubkey,
-    createdAt: new Date(),
-  }
-
+export function createMeeting(): Meeting {
+  const meeting = meetingFromBytes(generateSecretKey())
   currentMeeting.set(meeting)
   return meeting
 }
 
-// Parse meeting from URL hash containing hex privkey
-export function parseMeetingFromHash(): Meeting | null {
-  const hash = window.location.hash
-  if (!hash || hash.length < 2) return null
-
-  const privkeyHex = hash.slice(1)
-
-  // Validate hex format (64 chars for 32 bytes)
-  if (!/^[0-9a-fA-F]{64}$/.test(privkeyHex)) return null
-
+export function parseMeetingInput(input: string): Meeting | null {
+  let privkeyHex = input.trim()
+  if (privkeyHex.includes('#')) privkeyHex = privkeyHex.split('#')[1] || ''
+  if (!HEX_KEY_RE.test(privkeyHex)) return null
   try {
-    const privkeyBytes = hexToBytes(privkeyHex)
-    const pubkey = getPublicKey(privkeyBytes)
-
-    const meeting: Meeting = {
-      id: pubkey.slice(0, 12),
-      privkeyHex,
-      pubkey,
-      createdAt: new Date(),
-    }
-
-    currentMeeting.set(meeting)
-    return meeting
+    return meetingFromBytes(hexToBytes(privkeyHex), privkeyHex)
   } catch (e) {
-    console.error('Failed to parse meeting from hash:', e)
+    console.error('Failed to parse meeting key:', e)
+    return null
   }
-
-  return null
 }
 
-// Get the meeting link to share
+export function parseMeetingFromHash(): Meeting | null {
+  const meeting = parseMeetingInput(window.location.hash)
+  if (meeting) currentMeeting.set(meeting)
+  return meeting
+}
+
 export function getMeetingLink(meeting: Meeting): string {
-  const baseUrl = window.location.origin + window.location.pathname
-  return `${baseUrl}#${meeting.privkeyHex}`
+  return `${window.location.origin}${window.location.pathname}#${meeting.privkeyHex}`
 }
 
-// Check if we're in a meeting (have meeting key in URL)
 export function isInMeeting(): boolean {
-  const hash = window.location.hash
-  if (hash.length < 2) return false
-  const key = hash.slice(1)
-  return /^[0-9a-fA-F]{64}$/.test(key)
+  return HEX_KEY_RE.test(window.location.hash.slice(1))
 }
 
-// Leave the current meeting
 export function leaveMeeting(): void {
   currentMeeting.set(null)
-  // Clear hash from URL
   history.replaceState(null, '', window.location.pathname + window.location.search)
 }

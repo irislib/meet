@@ -1,4 +1,4 @@
-import { writable, type Readable } from 'svelte/store'
+import { readable, type Readable } from 'svelte/store'
 import { getNostrRuntime, PUBLIC_PROFILE_RELAYS } from './nostr'
 
 export interface Profile {
@@ -10,94 +10,56 @@ export interface Profile {
   nip05?: string
 }
 
-// Local profile rumor (unsigned kind 0 event content)
 const LOCAL_PROFILE_KEY = 'iris-meet-local-profile'
+const PROFILE_RETRY_DELAYS_MS = [5000, 15000, 45000]
 
-// In-memory profile cache
 const profileCache = new Map<string, Profile>()
+const pendingFetches = new Set<string>()
+const listeners = new Map<string, Set<(profile: Profile) => void>>()
 
-// Load local profile from storage
 function loadLocalProfile(): Profile | null {
   try {
     const stored = localStorage.getItem(LOCAL_PROFILE_KEY)
-    if (stored) {
-      return JSON.parse(stored)
-    }
-  } catch {
-    // ignore
-  }
-  return null
+    return stored ? JSON.parse(stored) : null
+  } catch { return null }
 }
 
-// Save local profile rumor
+const initialLocal = loadLocalProfile()
+if (initialLocal?.pubkey) profileCache.set(initialLocal.pubkey, initialLocal)
+
+function notifyListeners(pubkey: string, profile: Profile) {
+  listeners.get(pubkey)?.forEach(fn => fn(profile))
+}
+
 export function saveLocalProfile(pubkey: string, name: string): Profile {
-  const profile: Profile = {
-    pubkey,
-    name,
-    display_name: name,
-  }
-  try {
-    localStorage.setItem(LOCAL_PROFILE_KEY, JSON.stringify(profile))
-  } catch {
-    // ignore
-  }
-  // Also add to cache
+  const profile: Profile = { pubkey, name, display_name: name }
+  try { localStorage.setItem(LOCAL_PROFILE_KEY, JSON.stringify(profile)) } catch { /* Storage is optional. */ }
   profileCache.set(pubkey, profile)
   notifyListeners(pubkey, profile)
   return profile
 }
 
-// Get the local profile rumor (for sending to peers)
-export function getLocalProfile(): Profile | null {
-  return loadLocalProfile()
-}
+export const getLocalProfile = (): Profile | null => loadLocalProfile()
 
-// Add a received profile to the cache (from data channel)
 export function addProfileToCache(profile: Profile): void {
   if (!profile.pubkey) return
   profileCache.set(profile.pubkey, profile)
   notifyListeners(profile.pubkey, profile)
 }
 
-// Clear local profile on logout
-export function clearLocalProfile(): void {
-  try {
-    localStorage.removeItem(LOCAL_PROFILE_KEY)
-  } catch {
-    // ignore
-  }
+export function clearLocalProfile(pubkey?: string): void {
+  const key = pubkey ?? loadLocalProfile()?.pubkey
+  if (key) profileCache.delete(key)
+  try { localStorage.removeItem(LOCAL_PROFILE_KEY) } catch { /* Storage is optional. */ }
 }
 
-// Initialize: load local profile into cache
-const localProfile = loadLocalProfile()
-if (localProfile) {
-  profileCache.set(localProfile.pubkey, localProfile)
-}
-
-// Track in-flight fetches
-const pendingFetches = new Set<string>()
-
-// Listeners for profile updates
-type ProfileListener = (profile: Profile) => void
-const listeners = new Map<string, Set<ProfileListener>>()
-
-function subscribe(pubkey: string, listener: ProfileListener): () => void {
+function subscribeListener(pubkey: string, listener: (profile: Profile) => void): () => void {
   let set = listeners.get(pubkey)
-  if (!set) {
-    set = new Set()
-    listeners.set(pubkey, set)
-  }
+  if (!set) { set = new Set(); listeners.set(pubkey, set) }
   set.add(listener)
   return () => {
-    set!.delete(listener)
-    if (set!.size === 0) listeners.delete(pubkey)
-  }
-}
-
-function notifyListeners(pubkey: string, profile: Profile) {
-  const set = listeners.get(pubkey)
-  if (set) {
-    set.forEach(fn => fn(profile))
+    set.delete(listener)
+    if (set.size === 0) listeners.delete(pubkey)
   }
 }
 
@@ -106,19 +68,17 @@ function notifyListeners(pubkey: string, profile: Profile) {
  * after it, when it is only stored. While somebody is still showing this person,
  * ask again a few times, further apart each time.
  */
-const PROFILE_RETRY_DELAYS_MS = [5000, 15000, 45000]
-
 async function fetchProfile(pubkey: string, attempt = 0): Promise<void> {
   if (pendingFetches.has(pubkey)) return
-
   pendingFetches.add(pubkey)
   let unanswered = false
-
   try {
-    const { events, complete } = await getNostrRuntime().query([{ kinds: [0], authors: [pubkey], limit: 1 }], { relays: PUBLIC_PROFILE_RELAYS, sources: [], cache: 'cache-first' })
-
+    const { events, complete } = await getNostrRuntime().query(
+      [{ kinds: [0], authors: [pubkey], limit: 1 }],
+      { relays: PUBLIC_PROFILE_RELAYS, sources: [], cache: 'cache-first' },
+    )
     if (events.length > 0) {
-      const event = events.sort((a, b) => b.created_at - a.created_at)[0]
+      const event = events.reduce((latest, cur) => (cur.created_at > latest.created_at ? cur : latest))
       try {
         const profile = JSON.parse(event.content) as Profile
         profile.pubkey = event.pubkey
@@ -146,34 +106,17 @@ async function fetchProfile(pubkey: string, attempt = 0): Promise<void> {
 }
 
 export function createProfileStore(pubkey: string | undefined): Readable<Profile | undefined> {
-  if (!pubkey) {
-    const store = writable<Profile | undefined>(undefined)
-    return { subscribe: store.subscribe }
-  }
-
-  const store = writable<Profile | undefined>(profileCache.get(pubkey))
-
-  const unsubListener = subscribe(pubkey, (profile) => {
-    store.set(profile)
+  if (!pubkey) return readable<Profile | undefined>(undefined)
+  return readable<Profile | undefined>(profileCache.get(pubkey), set => {
+    const cached = profileCache.get(pubkey)
+    if (cached) set(cached)
+    const unsub = subscribeListener(pubkey, set)
+    if (!cached) void fetchProfile(pubkey)
+    return unsub
   })
-
-  if (!profileCache.get(pubkey)) {
-    fetchProfile(pubkey)
-  }
-
-  return {
-    subscribe: (run, invalidate) => {
-      const unsubStore = store.subscribe(run, invalidate)
-      return () => {
-        unsubStore()
-        unsubListener()
-      }
-    },
-  }
 }
 
 export function getProfileName(profile?: Profile): string | undefined {
   if (!profile) return undefined
-  return profile.display_name || profile.name || profile.username ||
-         (profile.nip05 ? profile.nip05.split('@')[0] : undefined)
+  return profile.display_name || profile.name || profile.username || profile.nip05?.split('@')[0]
 }

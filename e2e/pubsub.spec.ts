@@ -111,8 +111,9 @@ test('never stores or queues encrypted meeting signals when offline', async ({ p
   await expect(page.getByRole('heading', { name: 'Start a Meeting' })).toBeVisible()
   // Load code before disabling HTTP so the test exercises the actual app runtime.
   await page.evaluate(async () => {
-    const path = '/src/lib/nostr.ts'
+    const path = '/src/lib/nostr.ts', discoveryPath = '/src/lib/meetingDiscovery.ts'
     const { getNostrRuntime } = await import(path)
+    await import(discoveryPath)
     getNostrRuntime().setRelays([])
   })
   await context.setOffline(true)

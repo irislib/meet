@@ -1,78 +1,26 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte'
-  import { parseMeetingFromHash, type Meeting } from '../lib/meeting'
-  import { getPublicKey } from 'nostr-tools'
+  import { parseMeetingInput, type Meeting } from '../lib/meeting'
 
-  const dispatch = createEventDispatcher()
+  const dispatch = createEventDispatcher<{ join: { meeting: Meeting } }>()
 
   let meetingInput = ''
   let error = ''
 
-  function hexToBytes(hex: string): Uint8Array {
-    const bytes = new Uint8Array(hex.length / 2)
-    for (let i = 0; i < bytes.length; i++) {
-      bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
-    }
-    return bytes
-  }
-
-  function extractPrivkeyHex(input: string): string | null {
-    let privkeyHex = input.trim()
-
-    // If it's a URL, extract the hash
-    if (privkeyHex.includes('#')) {
-      privkeyHex = privkeyHex.split('#')[1] || ''
-    }
-
-    // Validate hex format (64 chars for 32 bytes)
-    if (/^[0-9a-fA-F]{64}$/.test(privkeyHex)) {
-      return privkeyHex
-    }
-    return null
-  }
-
-  function joinWithPrivkey(privkeyHex: string) {
-    try {
-      const privkeyBytes = hexToBytes(privkeyHex)
-      const pubkey = getPublicKey(privkeyBytes)
-
-      const meeting: Meeting = {
-        id: pubkey.slice(0, 12),
-        privkeyHex,
-        pubkey,
-        createdAt: new Date(),
-      }
-
-      dispatch('join', { meeting })
-    } catch (e) {
-      error = 'Invalid meeting link'
-    }
-  }
-
   function handleJoin() {
     error = ''
-    const privkeyHex = extractPrivkeyHex(meetingInput)
-    if (!privkeyHex) {
+    const meeting = parseMeetingInput(meetingInput)
+    if (!meeting) {
       error = 'Please enter a valid meeting link'
       return
     }
-    joinWithPrivkey(privkeyHex)
+    dispatch('join', { meeting })
   }
 
-  // Auto-join when valid link is pasted
+  // Auto-join when a valid link or secret is pasted.
   $: {
-    const privkeyHex = extractPrivkeyHex(meetingInput)
-    if (privkeyHex) {
-      joinWithPrivkey(privkeyHex)
-    }
-  }
-
-  // Check URL hash on mount
-  $: {
-    const hashMeeting = parseMeetingFromHash()
-    if (hashMeeting) {
-      dispatch('join', { meeting: hashMeeting })
-    }
+    const meeting = parseMeetingInput(meetingInput)
+    if (meeting) dispatch('join', { meeting })
   }
 </script>
 

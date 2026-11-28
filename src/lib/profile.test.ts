@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const { queryMock } = vi.hoisted(() => ({ queryMock: vi.fn() }))
 vi.mock('./nostr', () => ({ getNostrRuntime: () => ({ query: queryMock }), PUBLIC_PROFILE_RELAYS: [] }))
 
-import { createProfileStore } from './profile'
+import { createProfileStore, saveLocalProfile, clearLocalProfile } from './profile'
 
 const ALICE = 'a'.repeat(64)
 const BOB = 'b'.repeat(64)
@@ -65,5 +65,29 @@ describe('profile store', () => {
     stop()
     await vi.advanceTimersByTimeAsync(120000)
     expect(queryMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps delivering updates to remaining subscribers when one unsubscribes and clears cached local profile on logout', async () => {
+    const ERIN = 'e'.repeat(64)
+    queryMock.mockResolvedValueOnce(timedOut).mockResolvedValueOnce(found(ERIN, 'Erin'))
+    const store = createProfileStore(ERIN)
+    const firstSeen: Array<string | undefined> = []
+    const secondSeen: Array<string | undefined> = []
+    const unsub1 = store.subscribe(p => firstSeen.push(p?.name))
+    const unsub2 = store.subscribe(p => secondSeen.push(p?.name))
+    await vi.advanceTimersByTimeAsync(0)
+    unsub1()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(secondSeen).toEqual([undefined, 'Erin'])
+    unsub2()
+
+    const FRANK = 'f'.repeat(64)
+    saveLocalProfile(FRANK, 'Frank')
+    clearLocalProfile(FRANK)
+    queryMock.mockResolvedValueOnce({ events: [], complete: true, reason: 'eose' })
+    let afterClear: string | undefined = 'stale'
+    const unsub3 = createProfileStore(FRANK).subscribe(p => { afterClear = p?.name })
+    expect(afterClear).toBeUndefined()
+    unsub3()
   })
 })

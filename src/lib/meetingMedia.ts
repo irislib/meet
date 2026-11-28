@@ -10,6 +10,8 @@ interface Receiver {
   destination: MediaStreamAudioDestinationNode
   decoder?: VideoDecoder
   canvas: HTMLCanvasElement
+  ctx?: CanvasRenderingContext2D | null
+  videoTrack?: CanvasCaptureMediaStreamTrack
   audio: Map<number, MediaFrame>
   nextAudio?: number
   audioAt: number
@@ -20,6 +22,14 @@ interface Receiver {
   needKey: boolean
   requestedKey: number
   stats: { peer: string; audio: number; video: number; energy: number }
+}
+
+function stopWorklet(node?: AudioWorkletNode) {
+  if (!node) return
+  node.port.onmessage = null
+  node.port.postMessage({ stop: true })
+  node.port.close()
+  node.disconnect()
 }
 
 /** One capture/encode pipeline, with independent decoder and jitter state per participant.
@@ -37,14 +47,18 @@ export class MeetingMedia {
   private encoder?: VideoEncoder
   private capture = document.createElement('video')
   private canvas = document.createElement('canvas')
-  private timer: ReturnType<typeof setInterval>
+  private captureCtx?: CanvasRenderingContext2D | null
+  private videoTimer?: ReturnType<typeof setTimeout>
   private stopped = false
   private revision = 0
   private videoRevision = 0
   private epoch = performance.now()
   private audioSeq = 0
   private videoSeq = 0
-  private lastCapture = 0
+  private videoWidth = 1280
+  private videoHeight = 720
+  private frameIntervalMs = 1000 / 30
+  private nextCaptureAt = 0
   private lastKey = -Infinity
   private forceKey = true
   private audioEnabled = false
@@ -59,7 +73,7 @@ export class MeetingMedia {
   ) {
     this.context = context
     this.capture.muted = true; this.capture.playsInline = true
-    this.timer = setInterval(() => { this.captureVideo(); this.playVideo() }, 10)
+    this.capture.onloadeddata = () => this.scheduleVideo()
     window.addEventListener('pointerdown', this.resume)
     window.addEventListener('keydown', this.resume)
   }
@@ -105,7 +119,7 @@ export class MeetingMedia {
     }
     this.receivers.set(peer, receiver)
     this.remoteStream(peer, receiver.stream)
-    this.debugStats()
+    this.syncDebugStats()
   }
   async setCapture(stream: MediaStream | null, screen: MediaStream | null, audio: boolean, video: boolean) {
     const revision = ++this.revision
@@ -118,7 +132,7 @@ export class MeetingMedia {
         this.encoderOpus = opus
       }
       if (this.stopped || revision !== this.revision) return
-      this.source?.disconnect(); this.captureAudio?.disconnect()
+      this.source?.disconnect(); stopWorklet(this.captureAudio)
       this.source = undefined; this.captureAudio = undefined; this.audioTrack = audioTrack
       if (audioTrack) {
         const node = new AudioWorkletNode(this.context, 'iris-call-audio', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] })
@@ -170,7 +184,11 @@ export class MeetingMedia {
         await this.capture.play().catch(() => {})
       }
     }
-    if (video) this.forceKey = true
+    if (video) {
+      this.forceKey = true
+      this.nextCaptureAt = 0
+    }
+    this.scheduleVideo()
     this.resume()
   }
   requestKeyframe() { this.forceKey = true }
@@ -180,15 +198,19 @@ export class MeetingMedia {
     if (this.encoder?.state === 'configured') this.configureVideo()
   }
   private videoConfig(): VideoEncoderConfig {
+    const framerate = callVideoFramerate({}, this.targetBitrate)
     return {
       codec: callEncoding({}).codec,
       ...callVideoSize({}, this.videoTrack?.getSettings(), this.targetBitrate),
-      bitrate: this.targetBitrate, framerate: callVideoFramerate({}, this.targetBitrate),
+      bitrate: this.targetBitrate, framerate,
       latencyMode: 'realtime', bitrateMode: 'constant', avc: { format: 'annexb' },
     }
   }
   private configureVideo() {
     const config = this.videoConfig()
+    this.videoWidth = config.width
+    this.videoHeight = config.height
+    this.frameIntervalMs = 1000 / (config.framerate ?? 30)
     this.canvas.width = config.width; this.canvas.height = config.height
     this.encoder!.configure(config)
     this.forceKey = true
@@ -196,13 +218,44 @@ export class MeetingMedia {
       bitrate: config.bitrate, width: config.width, height: config.height, framerate: config.framerate,
     }
   }
+  // Wake only when capturing local video or waiting on an out-of-order remote frame gap.
+  private scheduleVideo() {
+    if (this.videoTimer !== undefined) { clearTimeout(this.videoTimer); this.videoTimer = undefined }
+    if (this.stopped) return
+    const now = performance.now()
+    let delay = Infinity
+    if (this.videoEnabled && this.encoder?.state === 'configured') {
+      delay = this.capture.readyState < 2 ? 15 : Math.max(0, this.nextCaptureAt - now)
+    }
+    for (const r of this.receivers.values()) {
+      if (r.video.length) delay = Math.min(delay, Math.max(1, 200 - (now - r.video[0].at)))
+    }
+    if (delay < Infinity) {
+      this.videoTimer = setTimeout(() => {
+        this.videoTimer = undefined
+        this.captureVideo()
+        for (const [peer, r] of this.receivers) if (r.video.length) this.playVideoFor(peer, r)
+        this.scheduleVideo()
+      }, Math.ceil(delay))
+    }
+  }
   private captureVideo() {
-    if (this.stopped || !this.videoEnabled || this.capture.readyState < 2 || performance.now() - this.lastCapture < 1000 / callVideoFramerate({}, this.targetBitrate)) return
+    if (this.stopped || !this.videoEnabled || this.capture.readyState < 2) return
     if (!this.encoder || this.encoder.state !== 'configured' || this.encoder.encodeQueueSize > 1) return
     const now = performance.now()
-    this.lastCapture = now
-    this.canvas.getContext('2d')!.drawImage(this.capture, 0, 0, this.canvas.width, this.canvas.height)
-    const frame = new VideoFrame(this.canvas, { timestamp: Math.round((now - this.epoch) * 1000) })
+    if (this.nextCaptureAt && now + 1 < this.nextCaptureAt) return
+    this.nextCaptureAt = this.nextCaptureAt && now - this.nextCaptureAt < this.frameIntervalMs
+      ? this.nextCaptureAt + this.frameIntervalMs
+      : now + this.frameIntervalMs
+    const timestamp = Math.round((now - this.epoch) * 1000)
+    let frame: VideoFrame
+    if (this.capture.videoWidth === this.videoWidth && this.capture.videoHeight === this.videoHeight) {
+      frame = new VideoFrame(this.capture, { timestamp })
+    } else {
+      const ctx = this.captureCtx ??= this.canvas.getContext('2d')
+      ctx!.drawImage(this.capture, 0, 0, this.videoWidth, this.videoHeight)
+      frame = new VideoFrame(this.canvas, { timestamp })
+    }
     const keyFrame = this.forceKey || now - this.lastKey >= 1000
     if (keyFrame) { this.forceKey = false; this.lastKey = now }
     this.encoder.encode(frame, { keyFrame }); frame.close()
@@ -222,8 +275,11 @@ export class MeetingMedia {
       if (r.audio.size > 16) { r.audio.clear(); r.nextAudio = frame.seq; r.audio.set(frame.seq, frame) }
     } else {
       if (r.lastVideo !== undefined && ((frame.seq - r.lastVideo) >>> 0) >= 0x80000000) return
-      r.video.push({ frame, at: now }); r.video.sort((a, b) => a.frame.timestamp - b.frame.timestamp)
+      r.video.push({ frame, at: now })
+      if (r.video.length > 1) r.video.sort((a, b) => a.frame.timestamp - b.frame.timestamp || ((a.frame.seq - b.frame.seq) | 0))
       if (r.video.length > 8) { r.video.shift(); r.needKey = true }
+      this.playVideoFor(peer, r)
+      if (r.video.length) this.scheduleVideo()
     }
   }
   private playAudio(r: Receiver) {
@@ -233,72 +289,88 @@ export class MeetingMedia {
     const pcm = r.opus.decode(frame?.bytes ?? next?.bytes, !frame && !!next)
     r.audio.delete(r.nextAudio); r.nextAudio = (r.nextAudio + 1) >>> 0
     if (pcm) {
-      if (frame) { r.stats.audio++; r.stats.energy += pcm.reduce((sum, sample) => sum + sample * sample, 0) / 48000 }
+      if (import.meta.env.DEV && frame) {
+        r.stats.audio++
+        let sum = 0
+        for (let i = 0; i < pcm.length; i++) sum += pcm[i] * pcm[i]
+        r.stats.energy += sum / 48000
+      }
       r.node.port.postMessage({ pcm }, [pcm.buffer])
-      this.debugStats()
     }
   }
-  private playVideo() {
-    for (const [peer, r] of this.receivers) {
-      const now = performance.now()
-      while (r.video.length && now - r.video[0].at >= 50) {
-        const first = r.video[0]
-        const gap = r.lastVideo === undefined ? !first.frame.key : first.frame.seq !== ((r.lastVideo + 1) >>> 0)
-        if (gap && now - first.at < 200) break
-        const { frame } = r.video.shift()!
-        if (gap) r.needKey = true
-        r.lastVideo = frame.seq
-        if (r.needKey && !frame.key) {
-          if (now - r.requestedKey >= 1000) { r.requestedKey = now; this.requestKey(peer) }
+  private maybeRequestKey(peer: string, r: Receiver, now: number) {
+    if (now - r.requestedKey >= 1000) { r.requestedKey = now; this.requestKey(peer) }
+  }
+  private playVideoFor(peer: string, r: Receiver) {
+    const now = performance.now()
+    while (r.video.length) {
+      const first = r.video[0]
+      const gap = r.lastVideo === undefined ? !first.frame.key : first.frame.seq !== ((r.lastVideo + 1) >>> 0)
+      if (gap && now - first.at < 200) break
+      const { frame } = r.video.shift()!
+      if (gap) r.needKey = true
+      r.lastVideo = frame.seq
+      if (r.needKey && !frame.key) {
+        this.maybeRequestKey(peer, r, now)
+        continue
+      }
+      if (!globalThis.VideoDecoder) continue
+      if (!r.decoder || r.decoder.state === 'closed') {
+        r.decoder = new VideoDecoder({
+          output: decoded => {
+            try {
+              if (this.stopped || !this.receivers.has(peer)) return
+              if (r.canvas.width !== decoded.displayWidth) r.canvas.width = decoded.displayWidth
+              if (r.canvas.height !== decoded.displayHeight) r.canvas.height = decoded.displayHeight
+              const ctx = r.ctx ??= r.canvas.getContext('2d')
+              ctx!.drawImage(decoded, 0, 0)
+              if (!r.videoTrack) {
+                r.videoTrack = r.canvas.captureStream(0).getVideoTracks()[0] as CanvasCaptureMediaStreamTrack
+                r.stream.addTrack(r.videoTrack)
+                this.remoteStream(peer, r.stream)
+              }
+              r.videoTrack.requestFrame()
+              if (import.meta.env.DEV) r.stats.video++
+            } finally { decoded.close() }
+          },
+          error: () => { r.needKey = true; this.requestKey(peer) },
+        })
+        r.decoder.configure({ codec: 'avc1.42e01f', optimizeForLatency: true })
+      }
+      if (r.decoder.decodeQueueSize > 3) {
+        if (frame.key) {
+          r.decoder.reset()
+          r.decoder.configure({ codec: 'avc1.42e01f', optimizeForLatency: true })
+        } else {
+          r.needKey = true
+          this.maybeRequestKey(peer, r, now)
           continue
         }
-        if (!globalThis.VideoDecoder) continue
-        if (!r.decoder || r.decoder.state === 'closed') {
-          r.decoder = new VideoDecoder({
-            output: decoded => {
-              try {
-                if (this.stopped || !this.receivers.has(peer)) return
-                if (r.canvas.width !== decoded.displayWidth) r.canvas.width = decoded.displayWidth
-                if (r.canvas.height !== decoded.displayHeight) r.canvas.height = decoded.displayHeight
-                r.canvas.getContext('2d')!.drawImage(decoded, 0, 0)
-                if (!r.stream.getVideoTracks().length) {
-                  const track = r.canvas.captureStream(0).getVideoTracks()[0]
-                  r.stream.addTrack(track)
-                  this.remoteStream(peer, r.stream)
-                }
-                ;(r.stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack).requestFrame()
-                r.stats.video++; this.debugStats()
-              } finally { decoded.close() }
-            },
-            error: () => { r.needKey = true; this.requestKey(peer) },
-          })
-          r.decoder.configure({ codec: 'avc1.42e01f', optimizeForLatency: true })
-        }
-        if (r.decoder.decodeQueueSize > 3) { r.needKey = true; continue }
-        if (frame.key) r.needKey = false
-        try { r.decoder.decode(new EncodedVideoChunk({ type: frame.key ? 'key' : 'delta', timestamp: frame.timestamp, data: frame.bytes })) }
-        catch { r.needKey = true }
       }
+      if (frame.key) r.needKey = false
+      try { r.decoder.decode(new EncodedVideoChunk({ type: frame.key ? 'key' : 'delta', timestamp: frame.timestamp, data: frame.bytes })) }
+      catch { r.needKey = true; this.maybeRequestKey(peer, r, now) }
     }
   }
-  private debugStats() {
-    if (import.meta.env.DEV) (window as any).__DEBUG_MEETING_MEDIA = [...this.receivers.values()].map(r => ({ ...r.stats }))
+  private syncDebugStats() {
+    if (import.meta.env.DEV) (window as any).__DEBUG_MEETING_MEDIA = [...this.receivers.values()].map(r => r.stats)
   }
   removePeer(peer: string) {
     this.opening.delete(peer)
     const r = this.receivers.get(peer)
     if (!r) return
-    r.node.disconnect(); r.destination.disconnect(); r.opus.close()
+    stopWorklet(r.node); r.destination.disconnect(); r.opus.close()
     if (r.decoder && r.decoder.state !== 'closed') r.decoder.close()
     r.stream.getTracks().forEach(track => track.stop())
-    this.receivers.delete(peer); this.debugStats()
+    this.receivers.delete(peer); this.syncDebugStats()
   }
   close() {
     this.stopped = true; this.revision++; this.videoRevision++
-    clearInterval(this.timer)
+    if (this.videoTimer !== undefined) { clearTimeout(this.videoTimer); this.videoTimer = undefined }
+    this.capture.onloadeddata = null
     window.removeEventListener('pointerdown', this.resume); window.removeEventListener('keydown', this.resume)
     for (const peer of this.receivers.keys()) this.removePeer(peer)
-    this.source?.disconnect(); this.captureAudio?.disconnect(); this.encoderOpus?.close()
+    this.source?.disconnect(); stopWorklet(this.captureAudio); this.encoderOpus?.close()
     if (this.encoder && this.encoder.state !== 'closed') this.encoder.close()
     this.capture.pause(); this.capture.srcObject = null
     void this.context.close().catch(() => {})

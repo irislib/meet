@@ -14,17 +14,18 @@ function processor() {
   new Function('AudioWorkletProcessor', 'registerProcessor', callAudioWorklet)(Base, (_name: string, value: typeof ProcessorClass) => { ProcessorClass = value })
   const node = new ProcessorClass()
   let samples = 0
+  let keepAlive = true
   vi.stubGlobal('sampleRate', 48000)
   const process = (length: number) => {
     vi.stubGlobal('currentTime', samples / 48000)
     const input = Float32Array.from({ length }, (_, i) => samples + i)
     const output = new Float32Array(length)
-    node.process([[input]], [[output]])
+    keepAlive = node.process([[input]], [[output]])
     samples += length
     return output
   }
   const message = (data: object) => node.port.onmessage({ data })
-  return { process, message, messages }
+  return { process, message, messages, alive: () => keepAlive }
 }
 
 afterEach(() => vi.unstubAllGlobals())
@@ -91,5 +92,16 @@ describe('production call audio worklet', () => {
     p.message({ active: false })
     p.message({ captured: true })
     expect(p.messages.filter(message => message.pcm)).toHaveLength(1)
+  })
+
+  it('stops processing and releases buffered audio when told to stop', () => {
+    const p = processor()
+    p.message({ active: true })
+    p.message({ pcm: new Float32Array(960).fill(0.5) })
+    p.process(960)
+    p.message({ stop: true })
+    const output = p.process(128)
+    expect(output.every(sample => sample === 0)).toBe(true)
+    expect(p.alive()).toBe(false)
   })
 })

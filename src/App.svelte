@@ -3,13 +3,12 @@
   import LoginForm from './components/LoginForm.svelte'
   import CreateMeeting from './components/CreateMeeting.svelte'
   import JoinMeeting from './components/JoinMeeting.svelte'
-  import MeetingRoom from './components/MeetingRoom.svelte'
   import Avatar from './components/Avatar.svelte'
   import Name from './components/Name.svelte'
   import ProfileSettings from '@iris/svelte-ui/ProfileSettings.svelte'
   import { copyToClipboard } from '@iris/svelte-ui/clipboard'
   import { nip19 } from 'nostr-tools'
-  import { identity, isLoggedIn, autoLogin, getLocalProfileNsec, logout } from './lib/identity'
+  import { identity, autoLogin, getLocalProfileNsec, logout } from './lib/identity'
   import { parseMeetingFromHash, currentMeeting, leaveMeeting, type Meeting } from './lib/meeting'
 
   type View = 'login' | 'home' | 'meeting'
@@ -21,6 +20,13 @@
   let settingsDialog: HTMLDialogElement
   let showSettings = false
   let showUserMenu = false
+  let meetingRoomPromise: Promise<typeof import('./components/MeetingRoom.svelte')> | null = null
+  function loadMeetingRoom() {
+    return meetingRoomPromise ??= import('./components/MeetingRoom.svelte').catch(error => {
+      meetingRoomPromise = null
+      throw error
+    })
+  }
   $: profiles = $identity ? [{
     id: $identity.pubkey,
     publicKey: nip19.npubEncode($identity.pubkey),
@@ -78,22 +84,12 @@
   })
 
   onMount(async () => {
-    // Check for meeting in URL hash
+    // Check for meeting in URL hash and preload the meeting bundle in parallel.
     const hashMeeting = parseMeetingFromHash()
+    if (hashMeeting) void loadMeetingRoom().catch(() => {})
 
-    // Try to auto-login
     const loggedIn = await autoLogin()
-
-    if (loggedIn) {
-      if (hashMeeting) {
-        view = 'meeting'
-      } else {
-        view = 'home'
-      }
-    } else {
-      view = 'login'
-    }
-
+    view = loggedIn ? (hashMeeting ? 'meeting' : 'home') : 'login'
     initializing = false
   })
 
@@ -265,6 +261,23 @@
       </footer>
     </div>
   {:else if view === 'meeting' && $currentMeeting}
-    <MeetingRoom meeting={$currentMeeting} on:leave={handleLeaveMeeting} />
+    {#await loadMeetingRoom()}
+      <div class="fixed inset-0 bg-surface-dark flex items-center justify-center">
+        <div class="text-center">
+          <div class="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p class="text-gray-400">Joining meeting...</p>
+        </div>
+      </div>
+    {:then { default: MeetingRoom }}
+      <MeetingRoom meeting={$currentMeeting} on:leave={handleLeaveMeeting} />
+    {:catch}
+      <div class="fixed inset-0 bg-surface-dark flex items-center justify-center">
+        <div class="text-center max-w-md p-6">
+          <h2 class="text-xl font-bold text-white mb-2">Failed to Join</h2>
+          <p class="text-gray-400 mb-4">Could not load the meeting room.</p>
+          <button class="btn-secondary" on:click={handleLeaveMeeting}>Go Back</button>
+        </div>
+      </div>
+    {/await}
   {/if}
 </main>

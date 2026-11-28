@@ -25,6 +25,13 @@ describe('portable build config', () => {
 
     expect(chunker).toBeTypeOf('function')
     expect(chunker?.('/repo/node_modules/nostr-pubsub/dist/index.js', {} as never)).toBe('vendor')
+    expect(chunker?.('/repo/node_modules/@fips/core/dist/index.js', {} as never)).toBe('fips')
+  })
+
+  it('precaches WebAssembly codecs for offline calls instead of base64-inlining them into JS', () => {
+    expect(configTextForTest()).toContain('wasm')
+    const callOpusSource = fs.readFileSync(path.resolve(process.cwd(), 'src', 'lib', 'callOpus.ts'), 'utf8')
+    expect(callOpusSource).not.toContain('?url&inline')
   })
 
   it('keeps the HTML entrypoint free of root-absolute asset refs', () => {

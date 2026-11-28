@@ -17,6 +17,11 @@
   onMount(() => {
     void loadDevices()
     if (meetingId) void restoreMediaPrefsForMeeting(meetingId)
+    const onDeviceChange = () => { void loadDevices() }
+    navigator.mediaDevices?.addEventListener?.('devicechange', onDeviceChange)
+    return () => {
+      navigator.mediaDevices?.removeEventListener?.('devicechange', onDeviceChange)
+    }
   })
 
   async function loadDevices() {
@@ -24,6 +29,12 @@
     audioDevices = devices.audioInputs
     videoDevices = devices.videoInputs
     audioOutputDevices = devices.audioOutputs
+  }
+
+  function mediaButtonClass(enabled: boolean) {
+    return enabled
+      ? 'bg-surface-light hover:bg-surface-lighter'
+      : 'bg-red-600 hover:bg-red-700'
   }
 
   async function handleToggleAudio() {
@@ -88,11 +99,7 @@
     <div class="relative flex">
       {#if audioDevices.length > 1 || audioOutputDevices.length > 0}
         <button
-          class="w-8 h-12 rounded-l-full flex items-center justify-center pl-2 pr-0 transition-colors border-r border-white/20"
-          class:bg-surface-light={$localMedia.audioEnabled}
-          class:hover:bg-surface-lighter={$localMedia.audioEnabled}
-          class:bg-red-600={!$localMedia.audioEnabled}
-          class:hover:bg-red-700={!$localMedia.audioEnabled}
+          class="w-8 h-12 rounded-l-full flex items-center justify-center pl-2 pr-0 transition-colors border-r border-white/20 {mediaButtonClass($localMedia.audioEnabled)}"
           on:click={() => { showAudioMenu = !showAudioMenu; showVideoMenu = false }}
           title="Select audio devices"
         >
@@ -100,11 +107,7 @@
         </button>
       {/if}
       <button
-        class="w-12 h-12 rounded-full flex items-center justify-center transition-colors {audioDevices.length > 1 || audioOutputDevices.length > 0 ? 'rounded-l-none' : ''}"
-        class:bg-surface-light={$localMedia.audioEnabled}
-        class:hover:bg-surface-lighter={$localMedia.audioEnabled}
-        class:bg-red-600={!$localMedia.audioEnabled}
-        class:hover:bg-red-700={!$localMedia.audioEnabled}
+        class="w-12 h-12 rounded-full flex items-center justify-center transition-colors {mediaButtonClass($localMedia.audioEnabled)} {audioDevices.length > 1 || audioOutputDevices.length > 0 ? 'rounded-l-none' : ''}"
         on:click={handleToggleAudio}
         title={$localMedia.audioEnabled ? 'Mute microphone (Ctrl+D)' : 'Unmute microphone (Ctrl+D)'}
       >
@@ -153,11 +156,7 @@
     <div class="relative flex">
       {#if videoDevices.length > 1}
         <button
-          class="w-8 h-12 rounded-l-full flex items-center justify-center pl-2 pr-0 transition-colors border-r border-white/20"
-          class:bg-surface-light={$localMedia.videoEnabled}
-          class:hover:bg-surface-lighter={$localMedia.videoEnabled}
-          class:bg-red-600={!$localMedia.videoEnabled}
-          class:hover:bg-red-700={!$localMedia.videoEnabled}
+          class="w-8 h-12 rounded-l-full flex items-center justify-center pl-2 pr-0 transition-colors border-r border-white/20 {mediaButtonClass($localMedia.videoEnabled)}"
           on:click={() => { showVideoMenu = !showVideoMenu; showAudioMenu = false }}
           title="Select camera"
         >
@@ -165,11 +164,7 @@
         </button>
       {/if}
       <button
-        class="w-12 h-12 rounded-full flex items-center justify-center transition-colors {videoDevices.length > 1 ? 'rounded-l-none' : ''}"
-        class:bg-surface-light={$localMedia.videoEnabled}
-        class:hover:bg-surface-lighter={$localMedia.videoEnabled}
-        class:bg-red-600={!$localMedia.videoEnabled}
-        class:hover:bg-red-700={!$localMedia.videoEnabled}
+        class="w-12 h-12 rounded-full flex items-center justify-center transition-colors {mediaButtonClass($localMedia.videoEnabled)} {videoDevices.length > 1 ? 'rounded-l-none' : ''}"
         on:click={handleToggleVideo}
         title={$localMedia.videoEnabled ? 'Turn off camera (Ctrl+E)' : 'Turn on camera (Ctrl+E)'}
       >

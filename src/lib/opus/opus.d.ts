@@ -8,4 +8,11 @@ export interface OpusModule {
   _call_decode(length: number, fec: number): number
   _call_destroy(): void
 }
-export default function createOpus(options: { wasmBinary: ArrayBuffer }): Promise<OpusModule>
+export interface OpusModuleOptions {
+  wasmBinary?: ArrayBuffer
+  instantiateWasm?: (
+    imports: WebAssembly.Imports,
+    receive: (instance: WebAssembly.Instance, module?: WebAssembly.Module) => void,
+  ) => WebAssembly.Exports
+}
+export default function createOpus(options: OpusModuleOptions): Promise<OpusModule>

@@ -193,4 +193,61 @@ describe('authenticated meeting transport', () => {
     unblock(); await first
     await a.close(); await b.close(); await c.close()
   })
+
+  it('omits idle video feedback when peers are not sending video and still reports full loss when video is active', async () => {
+    vi.useFakeTimers()
+    const net = network()
+    const a = new MeetingTransport(net.endpoint(alice), room, {})
+    const b = new MeetingTransport(net.endpoint(bob), room, {})
+    a.addPeer(bob); b.addPeer(alice)
+    await vi.advanceTimersByTimeAsync(3000)
+    const idleFeedback = net.sent.filter(p => p[0] !== 73).map(p => JSON.parse(new TextDecoder().decode(p))).filter(p => p.type === 'feedback')
+    expect(idleFeedback).toHaveLength(0)
+
+    a.setState({ audioEnabled: false, videoEnabled: true, screenSharing: false })
+    await vi.advanceTimersByTimeAsync(1000)
+    const activeFeedback = net.sent.filter(p => p[0] !== 73).map(p => JSON.parse(new TextDecoder().decode(p))).filter(p => p.type === 'feedback')
+    expect(activeFeedback.length).toBeGreaterThan(0)
+    expect(activeFeedback[activeFeedback.length - 1]).toMatchObject({ received_frames: 0, received_bytes: 0 })
+    await a.close(); await b.close()
+  })
+
+  it('preserves a pending keyframe instead of dropping it behind a stalled delta frame', async () => {
+    const net = network(), media = vi.fn()
+    const endpoint = net.endpoint(alice)
+    let releaseDelta!: () => void
+    let blocked = false
+    const a = new MeetingTransport({
+      ...endpoint,
+      sendDatagram: packet => {
+        if (packet.payload[0] === 73 && !blocked) {
+          blocked = true
+          return new Promise<void>(resolve => { releaseDelta = () => { void endpoint.sendDatagram(packet); resolve() } })
+        }
+        return endpoint.sendDatagram(packet)
+      },
+    }, room, {})
+    const b = new MeetingTransport(net.endpoint(bob), room, { media })
+    a.addPeer(bob); b.addPeer(alice)
+    const delta = a.sendMedia({ kind: 2, key: false, seq: 1, timestamp: 1000, bytes: new Uint8Array(100) })
+    await Promise.resolve()
+    // A keyframe arrives while the delta is still flushing on this peer's route.
+    const keyframe = a.sendMedia({ kind: 2, key: true, seq: 2, timestamp: 2000, bytes: new Uint8Array(100).fill(9) })
+    await Promise.resolve()
+    releaseDelta()
+    await Promise.all([delta, keyframe])
+    expect(media).toHaveBeenCalledWith(alice, expect.objectContaining({ kind: 2, key: true, seq: 2 }))
+    await a.close(); await b.close()
+  })
+
+  it('sends best-effort leave synchronously via sendLeave', async () => {
+    const net = network(), leave = vi.fn()
+    const a = new MeetingTransport(net.endpoint(alice), room, {})
+    const b = new MeetingTransport(net.endpoint(bob), room, { leave })
+    a.addPeer(bob); b.addPeer(alice)
+    a.sendLeave()
+    await Promise.resolve()
+    expect(leave).toHaveBeenCalledWith(alice)
+    await a.close(); await b.close()
+  })
 })

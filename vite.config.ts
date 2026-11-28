@@ -4,7 +4,10 @@ import UnoCSS from 'unocss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export function runtimeChunk(id: string): string | undefined {
-  return id.includes('/node_modules/') ? 'vendor' : undefined
+  if (!id.includes('/node_modules/')) return undefined
+  if (/\/@fips(?:\/|\+)(?:core|transport-)/.test(id)) return 'fips'
+  if (/\/(?:@hashtree|dexie|@msgpack)(?:\/|\+)/.test(id)) return 'storage'
+  return 'vendor'
 }
 
 // https://vite.dev/config/
@@ -43,7 +46,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,wasm}'],
       },
     }),
   ],

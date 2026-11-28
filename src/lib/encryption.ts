@@ -1,15 +1,7 @@
 import { nip44, getPublicKey } from 'nostr-tools'
+import { hexToBytes } from 'nostr-tools/utils'
 import { get } from 'svelte/store'
 import { identity } from './identity'
-
-// Helper function
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2)
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
-  }
-  return bytes
-}
 
 export interface MeetingEncryption {
   roomPubkey: string
@@ -18,23 +10,15 @@ export interface MeetingEncryption {
 }
 
 export function createMeetingEncryption(roomPrivkeyHex: string): MeetingEncryption {
-  const roomPubkey = getPublicKey(hexToBytes(roomPrivkeyHex))
-  // Use room's own key pair for symmetric-like encryption
-  // Everyone encrypts TO the room pubkey using the room privkey (shared secret)
-  const sharedKey = nip44.v2.utils.getConversationKey(hexToBytes(roomPrivkeyHex), roomPubkey)
+  const privkeyBytes = hexToBytes(roomPrivkeyHex)
+  const roomPubkey = getPublicKey(privkeyBytes)
+  // Everyone encrypts to the room pubkey using the shared room secret.
+  const sharedKey = nip44.v2.utils.getConversationKey(privkeyBytes, roomPubkey)
 
   return {
     roomPubkey,
-
-    // Encrypt message using shared room key
-    encrypt(plaintext: string): string {
-      return nip44.v2.encrypt(plaintext, sharedKey)
-    },
-
-    // Decrypt message using shared room key
-    decrypt(ciphertext: string): string {
-      return nip44.v2.decrypt(ciphertext, sharedKey)
-    }
+    encrypt: (plaintext: string) => nip44.v2.encrypt(plaintext, sharedKey),
+    decrypt: (ciphertext: string) => nip44.v2.decrypt(ciphertext, sharedKey),
   }
 }
 
