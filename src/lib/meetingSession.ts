@@ -48,7 +48,7 @@ let active: {
   stopNode: () => Promise<void>; transport: MeetingTransport; media: MeetingMedia
   roomPubkey: string; discovery?: ReturnType<typeof startMeetingDiscovery>
   interval?: ReturnType<typeof setInterval>; presenceTimer?: ReturnType<typeof setTimeout>
-  onPageHide?: () => void
+  onPageHide?: (event: PageTransitionEvent) => void
 } | undefined
 
 function report(error: unknown) { meetingError.set(error instanceof Error ? error.message : String(error)) }
@@ -290,7 +290,11 @@ export async function joinRoom(secret: string) {
       (peer, stream) => { if (run === generation) updateParticipant(peer, { stream }) },
       peer => transport.requestKeyframe(peer), report)
     if (run !== generation) { media.close(); await transport.close(); await stopNode(); return }
-    const onPageHide = () => { transport.sendLeave() }
+    const onPageHide = (event: PageTransitionEvent) => {
+      // A cached page keeps this session and its signed presence binding.
+      // Only announce departure when the page is actually being discarded.
+      if (!event.persisted) void Promise.allSettled(transport.sendLeave())
+    }
     window.addEventListener('pagehide', onPageHide)
     active = { stopNode, transport, media, roomPubkey: encryption.roomPubkey, onPageHide }
     await node.start()
